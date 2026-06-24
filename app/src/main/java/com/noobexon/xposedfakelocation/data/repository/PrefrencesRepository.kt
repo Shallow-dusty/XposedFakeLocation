@@ -18,6 +18,7 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_MAP_ZOOM
 import com.noobexon.xposedfakelocation.data.DEFAULT_MEAN_SEA_LEVEL
 import com.noobexon.xposedfakelocation.data.DEFAULT_MEAN_SEA_LEVEL_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_RANDOMIZE_RADIUS
+import com.noobexon.xposedfakelocation.data.DEFAULT_ROUTE_LOOP_ENABLED
 import com.noobexon.xposedfakelocation.data.DEFAULT_SPEED
 import com.noobexon.xposedfakelocation.data.DEFAULT_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_THEME_OPTION
@@ -43,6 +44,8 @@ import com.noobexon.xposedfakelocation.data.KEY_MAP_ZOOM
 import com.noobexon.xposedfakelocation.data.KEY_MEAN_SEA_LEVEL
 import com.noobexon.xposedfakelocation.data.KEY_MEAN_SEA_LEVEL_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_RANDOMIZE_RADIUS
+import com.noobexon.xposedfakelocation.data.KEY_ROUTE_LOOP_ENABLED
+import com.noobexon.xposedfakelocation.data.KEY_ROUTE_WAYPOINTS
 import com.noobexon.xposedfakelocation.data.KEY_SPEED
 import com.noobexon.xposedfakelocation.data.KEY_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_TARGET_APPS
@@ -60,6 +63,7 @@ import com.noobexon.xposedfakelocation.data.REMOTE_PREFS_GROUP
 import com.noobexon.xposedfakelocation.data.SHARED_PREFS_FILE
 import com.noobexon.xposedfakelocation.data.model.FavoriteLocation
 import com.noobexon.xposedfakelocation.data.model.LastClickedLocation
+import com.noobexon.xposedfakelocation.data.model.RouteWaypoint
 import com.noobexon.xposedfakelocation.manager.App
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
@@ -340,6 +344,40 @@ class PreferencesRepository(context: Context) {
             emptyList()
         }
     }
+    // endregion
+
+    // region Route Waypoints (local)
+    fun getRouteWaypointsFlow(): Flow<List<RouteWaypoint>> =
+        localFlow(KEY_ROUTE_WAYPOINTS) { parseRouteWaypoints(it.getString(KEY_ROUTE_WAYPOINTS, null)) }
+
+    fun getRouteWaypoints(): List<RouteWaypoint> =
+        parseRouteWaypoints(localPrefs.getString(KEY_ROUTE_WAYPOINTS, null))
+
+    suspend fun saveRouteWaypoints(waypoints: List<RouteWaypoint>) {
+        val json = gson.toJson(waypoints)
+        editLocal { putString(KEY_ROUTE_WAYPOINTS, json) }
+    }
+
+    suspend fun clearRouteWaypoints() {
+        editLocal { remove(KEY_ROUTE_WAYPOINTS) }
+    }
+
+    private fun parseRouteWaypoints(json: String?): List<RouteWaypoint> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<RouteWaypoint>>() {}.type
+            gson.fromJson(json, type)
+        } catch (e: JsonSyntaxException) {
+            Log.e(tag, "Error parsing route waypoints: ${e.message}")
+            emptyList()
+        }
+    }
+
+    fun getRouteLoopEnabledFlow(): Flow<Boolean> =
+        localFlow(KEY_ROUTE_LOOP_ENABLED) { it.getBoolean(KEY_ROUTE_LOOP_ENABLED, DEFAULT_ROUTE_LOOP_ENABLED) }
+
+    suspend fun saveRouteLoopEnabled(enabled: Boolean) =
+        editLocal { putBoolean(KEY_ROUTE_LOOP_ENABLED, enabled) }
     // endregion
 
     // region Map Zoom (local)
