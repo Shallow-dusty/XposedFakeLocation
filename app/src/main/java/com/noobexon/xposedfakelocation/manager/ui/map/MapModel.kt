@@ -68,7 +68,7 @@ data class MapUiState(
     val isRouteDialogVisible: Boolean = false,
     val isRouteMoving: Boolean = false,
 ) {
-    /** `true` when the FAB should be interactive, i.e. a spoof target has been placed on the map. */
+    /** `true` when the FAB can start/stop spoofing or route playback. */
     val isFabClickable: Boolean
         get() = lastClickedLocation != null || canPlayRoute
 
