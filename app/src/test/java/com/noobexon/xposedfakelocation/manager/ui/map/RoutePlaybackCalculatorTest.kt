@@ -4,6 +4,7 @@ import com.noobexon.xposedfakelocation.data.model.RouteWaypoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class RoutePlaybackCalculatorTest {
     @Test
@@ -25,6 +26,20 @@ class RoutePlaybackCalculatorTest {
         val result = RoutePlaybackCalculator.interpolate(10.0, 20.0, 0.25)
 
         assertEquals(12.5, result, 0.0)
+    }
+
+    @Test
+    fun interpolateLongitude_usesShortestPathAcrossDateLineEastbound() {
+        val result = RoutePlaybackCalculator.interpolateLongitude(179.9, -179.9, 0.5)
+
+        assertEquals(180.0, abs(result), 0.0001)
+    }
+
+    @Test
+    fun interpolateLongitude_usesShortestPathAcrossDateLineWestbound() {
+        val result = RoutePlaybackCalculator.interpolateLongitude(-179.9, 179.9, 0.5)
+
+        assertEquals(180.0, abs(result), 0.0001)
     }
 
     @Test

@@ -522,7 +522,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
             val elapsedMs = System.currentTimeMillis() - startedAt
             val progress = (elapsedMs.toDouble() / durationMs).coerceIn(0.0, 1.0)
             val latitude = RoutePlaybackCalculator.interpolate(start.latitude, end.latitude, progress)
-            val longitude = RoutePlaybackCalculator.interpolate(start.longitude, end.longitude, progress)
+            val longitude = RoutePlaybackCalculator.interpolateLongitude(start.longitude, end.longitude, progress)
             publishRouteLocation(latitude, longitude)
             if (progress >= 1.0) break
             delay(ROUTE_TICK_INTERVAL_MS)
