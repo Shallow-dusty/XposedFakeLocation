@@ -3,8 +3,10 @@ package com.noobexon.xposedfakelocation.xposed.hooks
 
 import android.location.Location
 import android.location.LocationManager
+import android.net.wifi.ScanResult
 import android.net.wifi.WifiInfo
 import android.os.Build
+import android.os.SystemClock
 import android.telephony.CellInfo
 import android.util.ArrayMap
 import android.util.Log
@@ -276,8 +278,8 @@ class SystemServicesHooks(
         hookAll(wifiServiceClass, "getScanResults") { chain ->
             val result = chain.proceed()
             if (shouldSpoofArgs(chain.args)) {
-                module.log(Log.INFO, tag, "Cleared Wi-Fi scan results while spoofing.")
-                emptyList<Any>()
+                module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing.")
+                createFakeScanResults()
             } else {
                 result
             }
@@ -295,12 +297,37 @@ class SystemServicesHooks(
     }
 
     private fun createFakeWifiInfo(): WifiInfo =
-        WifiInfo.Builder()
-            .setBssid(PreferencesUtil.getWifiBssid().takeIf(MAC_ADDRESS_REGEX::matches) ?: DEFAULT_WIFI_BSSID)
-            .setSsid(PreferencesUtil.getWifiSsid().toByteArray())
-            .setRssi(PreferencesUtil.getWifiRssi())
-            .setNetworkId(0)
-            .build()
+        readWifiIdentity().let { identity ->
+            WifiInfo.Builder()
+                .setBssid(identity.bssid)
+                .setSsid(identity.ssid.toByteArray())
+                .setRssi(identity.rssi)
+                .setNetworkId(0)
+                .build()
+        }
+
+    private fun createFakeScanResults(): List<ScanResult> =
+        WifiScanResultPolicy.createSpecs(readWifiIdentity()).map { it.toScanResult() }
+
+    private fun readWifiIdentity(): SpoofedWifiIdentity =
+        SpoofedWifiIdentity(
+            ssid = PreferencesUtil.getWifiSsid(),
+            bssid = PreferencesUtil.getWifiBssid().takeIf(MAC_ADDRESS_REGEX::matches) ?: DEFAULT_WIFI_BSSID,
+            rssi = PreferencesUtil.getWifiRssi()
+        )
+
+    @Suppress("DEPRECATION")
+    private fun SpoofedWifiScanResultSpec.toScanResult(): ScanResult {
+        val spec = this
+        return ScanResult().apply {
+            SSID = spec.ssid
+            BSSID = spec.bssid
+            level = spec.rssi
+            frequency = spec.frequency
+            capabilities = spec.capabilities
+            timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
+        }
+    }
 
     private fun hookGeofence(classLoader: ClassLoader) {
         val serviceClass = findClass(
