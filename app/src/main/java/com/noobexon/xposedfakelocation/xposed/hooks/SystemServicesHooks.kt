@@ -314,12 +314,13 @@ class SystemServicesHooks(
             ?.filterIsInstance<ScanResult>()
             ?.firstOrNull { it.hasNonEmptyInformationElementsCompat() }
 
-        if (template == null) {
-            module.log(Log.WARN, tag, "No safe Wi-Fi scan result template; returning an empty spoofed scan list.")
-            return emptyList()
+        val specs = WifiScanResultPolicy.createSpecs(readWifiIdentity())
+        if (template != null) {
+            return specs.mapNotNull { it.toScanResult(template) }
         }
 
-        return WifiScanResultPolicy.createSpecs(readWifiIdentity()).mapNotNull { it.toScanResult(template) }
+        module.log(Log.INFO, tag, "No safe Wi-Fi scan result template; synthesizing minimal spoofed scan result.")
+        return specs.mapNotNull { it.toScanResult() }
     }
 
     private fun readWifiIdentity(): SpoofedWifiIdentity =
@@ -339,18 +340,36 @@ class SystemServicesHooks(
             .getOrNull() ?: return null
 
         return scanResult.apply {
-            SSID = spec.ssid
-            setWifiSsidCompat(spec.ssid)
-            BSSID = spec.bssid
-            level = spec.rssi
-            frequency = spec.frequency
-            channelWidth = 0
-            centerFreq0 = 0
-            centerFreq1 = 0
-            capabilities = spec.capabilities
+            applySpoofedSpec(spec)
             rewriteSsidInformationElementCompat(spec.ssid)
-            timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun SpoofedWifiScanResultSpec.toScanResult(): ScanResult? {
+        val spec = this
+        return runCatching {
+            ScanResult().apply {
+                applySpoofedSpec(spec)
+                setSyntheticInformationElementsCompat(spec.ssid)
+            }
+        }.onFailure {
+            module.log(Log.WARN, tag, "Could not synthesize Wi-Fi scan result: ${it.message}")
+        }.getOrNull()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun ScanResult.applySpoofedSpec(spec: SpoofedWifiScanResultSpec) {
+        SSID = spec.ssid
+        setWifiSsidCompat(spec.ssid)
+        BSSID = spec.bssid
+        level = spec.rssi
+        frequency = spec.frequency
+        channelWidth = 0
+        centerFreq0 = 0
+        centerFreq1 = 0
+        capabilities = spec.capabilities
+        timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
     }
 
     private fun ScanResult.setWifiSsidCompat(ssid: String) {
@@ -412,6 +431,56 @@ class SystemServicesHooks(
         }
     }
 
+    private fun ScanResult.setSyntheticInformationElementsCompat(ssid: String) {
+        runCatching {
+            val field = findInformationElementsField(javaClass)
+                ?: return module.log(Log.WARN, tag, "Could not find ScanResult information elements field.")
+            val componentType = field.type.componentType ?: return
+            val ssidElement = createInformationElementCompat(
+                componentType,
+                id = SSID_INFORMATION_ELEMENT_ID,
+                idExt = 0,
+                bytes = ssid.toByteArray(StandardCharsets.UTF_8)
+            ) ?: return module.log(Log.WARN, tag, "Could not create ScanResult SSID information element.")
+
+            val elements = ReflectArray.newInstance(componentType, 1)
+            ReflectArray.set(elements, 0, ssidElement)
+            field.set(this, elements)
+        }.onFailure {
+            module.log(Log.WARN, tag, "Could not initialize synthetic ScanResult information elements: ${it.message}")
+        }
+    }
+
+    private fun createInformationElementCompat(
+        elementClass: Class<*>,
+        id: Int,
+        idExt: Int,
+        bytes: ByteArray
+    ): Any? {
+        val element = instantiateInformationElementCompat(elementClass) ?: return null
+        setIntFieldCompat(element, "id", id)
+        setIntFieldCompat(element, "idExt", idExt)
+        findField(element.javaClass, "bytes")?.set(element, bytes)
+        return element
+    }
+
+    private fun instantiateInformationElementCompat(elementClass: Class<*>): Any? {
+        val noArgConstructor = elementClass.declaredConstructors.firstOrNull { it.parameterTypes.isEmpty() }
+        if (noArgConstructor != null) {
+            return runCatching {
+                noArgConstructor.isAccessible = true
+                noArgConstructor.newInstance()
+            }.getOrNull()
+        }
+
+        return runCatching {
+            val unsafeClass = Class.forName("sun.misc.Unsafe")
+            val unsafeField = unsafeClass.getDeclaredField("theUnsafe").apply { isAccessible = true }
+            val unsafe = unsafeField.get(null)
+            unsafeClass.getMethod("allocateInstance", Class::class.java).invoke(unsafe, elementClass)
+        }.getOrNull()
+    }
+
     private fun Any.copyInformationElementCompat(): Any? {
         return runCatching {
             val constructor = javaClass.declaredConstructors.firstOrNull { constructor ->
@@ -420,6 +489,15 @@ class SystemServicesHooks(
             constructor.isAccessible = true
             constructor.newInstance(this)
         }.getOrNull()
+    }
+
+    private fun setIntFieldCompat(target: Any, fieldName: String, value: Int) {
+        val field = findField(target.javaClass, fieldName) ?: return
+        if (field.type == java.lang.Integer.TYPE) {
+            field.setInt(target, value)
+        } else {
+            field.set(target, value)
+        }
     }
 
     private fun Any.informationElementIdCompat(): Int? {
