@@ -3,8 +3,10 @@ package com.noobexon.xposedfakelocation.xposed.hooks
 
 import android.location.Location
 import android.location.LocationManager
+import android.net.wifi.ScanResult
 import android.net.wifi.WifiInfo
 import android.os.Build
+import android.os.SystemClock
 import android.telephony.CellInfo
 import android.util.ArrayMap
 import android.util.Log
@@ -282,8 +284,8 @@ class SystemServicesHooks(
             val result = chain.proceed()
             val identity = WifiIdentityHookPolicy.readActiveIdentity(module)
             if (identity != null && shouldSpoofWifiArgs(chain.args, identity.targetApps)) {
-                module.log(Log.INFO, tag, "Cleared Wi-Fi scan results while spoofing.")
-                emptyList<Any>()
+                module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing.")
+                createFakeScanResults(identity)
             } else {
                 result
             }
@@ -308,6 +310,28 @@ class SystemServicesHooks(
             .setRssi(identity.rssi)
             .setNetworkId(0)
             .build()
+
+    private fun createFakeScanResults(identity: WifiIdentity): List<ScanResult> =
+        WifiScanResultPolicy.createSpecs(
+            SpoofedWifiIdentity(
+                ssid = identity.ssid,
+                bssid = identity.bssid,
+                rssi = identity.rssi
+            )
+        ).map { it.toScanResult() }
+
+    @Suppress("DEPRECATION")
+    private fun SpoofedWifiScanResultSpec.toScanResult(): ScanResult {
+        val spec = this
+        return ScanResult().apply {
+            SSID = spec.ssid
+            BSSID = spec.bssid
+            level = spec.rssi
+            frequency = spec.frequency
+            capabilities = spec.capabilities
+            timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
+        }
+    }
 
     private fun hookGeofence(classLoader: ClassLoader) {
         val serviceClass = findClass(
