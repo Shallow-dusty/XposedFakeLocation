@@ -17,8 +17,10 @@ import dalvik.system.PathClassLoader
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.Chain
 import io.github.libxposed.api.XposedInterface.Hooker
+import java.lang.reflect.Array as ReflectArray
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.nio.charset.StandardCharsets
 
 class SystemServicesHooks(
     private val module: XposedInterface,
@@ -278,8 +280,9 @@ class SystemServicesHooks(
         hookAll(wifiServiceClass, "getScanResults") { chain ->
             val result = chain.proceed()
             if (shouldSpoofArgs(chain.args)) {
-                module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing.")
-                createFakeScanResults()
+                val fakeResults = createFakeScanResults(result)
+                module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing (${fakeResults.size} result(s)).")
+                fakeResults
             } else {
                 result
             }
@@ -306,8 +309,18 @@ class SystemServicesHooks(
                 .build()
         }
 
-    private fun createFakeScanResults(): List<ScanResult> =
-        WifiScanResultPolicy.createSpecs(readWifiIdentity()).map { it.toScanResult() }
+    private fun createFakeScanResults(original: Any?): List<ScanResult> {
+        val template = (original as? List<*>)
+            ?.filterIsInstance<ScanResult>()
+            ?.firstOrNull { it.hasNonEmptyInformationElementsCompat() }
+
+        if (template == null) {
+            module.log(Log.WARN, tag, "No safe Wi-Fi scan result template; returning an empty spoofed scan list.")
+            return emptyList()
+        }
+
+        return WifiScanResultPolicy.createSpecs(readWifiIdentity()).mapNotNull { it.toScanResult(template) }
+    }
 
     private fun readWifiIdentity(): SpoofedWifiIdentity =
         SpoofedWifiIdentity(
@@ -317,15 +330,147 @@ class SystemServicesHooks(
         )
 
     @Suppress("DEPRECATION")
-    private fun SpoofedWifiScanResultSpec.toScanResult(): ScanResult {
+    private fun SpoofedWifiScanResultSpec.toScanResult(template: ScanResult): ScanResult? {
         val spec = this
-        return ScanResult().apply {
+        val scanResult = runCatching { ScanResult(template) }
+            .onFailure {
+                module.log(Log.WARN, tag, "Could not copy Wi-Fi scan result template: ${it.message}")
+            }
+            .getOrNull() ?: return null
+
+        return scanResult.apply {
             SSID = spec.ssid
+            setWifiSsidCompat(spec.ssid)
             BSSID = spec.bssid
             level = spec.rssi
             frequency = spec.frequency
+            channelWidth = 0
+            centerFreq0 = 0
+            centerFreq1 = 0
             capabilities = spec.capabilities
+            rewriteSsidInformationElementCompat(spec.ssid)
             timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
+        }
+    }
+
+    private fun ScanResult.setWifiSsidCompat(ssid: String) {
+        val wifiSsid = createWifiSsidCompat(ssid) ?: return
+
+        runCatching {
+            val setter = javaClass.methods.firstOrNull { method ->
+                method.name == "setWifiSsid" && method.parameterTypes.size == 1
+            } ?: javaClass.declaredMethods.firstOrNull { method ->
+                method.name == "setWifiSsid" && method.parameterTypes.size == 1
+            }
+            if (setter != null) {
+                setter.isAccessible = true
+                setter.invoke(this, wifiSsid)
+                return
+            }
+
+            val field = findField(javaClass, "wifiSsid") ?: return
+            field.set(this, wifiSsid)
+        }.onFailure {
+            module.log(Log.WARN, tag, "Could not set modern Wi-Fi SSID on ScanResult: ${it.message}")
+        }
+    }
+
+    private fun ScanResult.hasNonEmptyInformationElementsCompat(): Boolean {
+        return runCatching {
+            val field = findInformationElementsField(javaClass) ?: return true
+            val value = field.get(this) ?: return false
+            !value.javaClass.isArray || ReflectArray.getLength(value) > 0
+        }.getOrElse {
+            module.log(Log.WARN, tag, "Could not inspect ScanResult information elements: ${it.message}")
+            false
+        }
+    }
+
+    private fun ScanResult.rewriteSsidInformationElementCompat(ssid: String) {
+        runCatching {
+            val field = findInformationElementsField(javaClass) ?: return
+            val elements = field.get(this) ?: return
+            if (!elements.javaClass.isArray) return
+
+            val length = ReflectArray.getLength(elements)
+            val componentType = elements.javaClass.componentType ?: return
+            val copiedElements = ReflectArray.newInstance(componentType, length)
+            val ssidBytes = ssid.toByteArray(StandardCharsets.UTF_8)
+
+            repeat(length) { index ->
+                val sourceElement = ReflectArray.get(elements, index)
+                val copiedElement = sourceElement?.copyInformationElementCompat()
+                if (copiedElement != null && copiedElement.informationElementIdCompat() == SSID_INFORMATION_ELEMENT_ID) {
+                    findField(copiedElement.javaClass, "bytes")?.set(copiedElement, ssidBytes)
+                }
+                ReflectArray.set(copiedElements, index, copiedElement ?: sourceElement)
+            }
+
+            field.set(this, copiedElements)
+        }.onFailure {
+            module.log(Log.WARN, tag, "Could not rewrite ScanResult SSID information element: ${it.message}")
+        }
+    }
+
+    private fun Any.copyInformationElementCompat(): Any? {
+        return runCatching {
+            val constructor = javaClass.declaredConstructors.firstOrNull { constructor ->
+                constructor.parameterTypes.size == 1 && constructor.parameterTypes[0].isAssignableFrom(javaClass)
+            } ?: return null
+            constructor.isAccessible = true
+            constructor.newInstance(this)
+        }.getOrNull()
+    }
+
+    private fun Any.informationElementIdCompat(): Int? {
+        return runCatching {
+            (findMethod(javaClass, "getId")?.invoke(this) as? Int)
+                ?: (findField(javaClass, "id")?.get(this) as? Int)
+        }.getOrNull()
+    }
+
+    private fun findInformationElementsField(clazz: Class<*>): Field? {
+        findField(clazz, "informationElements")?.let { return it }
+
+        var currentClass: Class<*>? = clazz
+        while (currentClass != null) {
+            currentClass.declaredFields.firstOrNull { field ->
+                field.type.isArray &&
+                    field.type.componentType?.name == "android.net.wifi.ScanResult\$InformationElement"
+            }?.let { field ->
+                field.isAccessible = true
+                return field
+            }
+            currentClass = currentClass.superclass
+        }
+
+        return null
+    }
+
+    private fun createWifiSsidCompat(ssid: String): Any? {
+        val wifiSsidClass = runCatching {
+            Class.forName("android.net.wifi.WifiSsid")
+        }.getOrNull() ?: return null
+
+        val fromUtf8Text = wifiSsidClass.methods.firstOrNull { method ->
+            method.name == "fromUtf8Text" && method.parameterTypes.size == 1
+        }
+        if (fromUtf8Text != null) {
+            return runCatching { fromUtf8Text.invoke(null, ssid) }.getOrNull()
+        }
+
+        val fromBytes = wifiSsidClass.methods.firstOrNull { method ->
+            method.name == "fromBytes" && method.parameterTypes.contentEquals(arrayOf(ByteArray::class.java))
+        }
+        if (fromBytes != null) {
+            return runCatching { fromBytes.invoke(null, ssid.toByteArray(StandardCharsets.UTF_8)) }.getOrNull()
+        }
+
+        val createFromAsciiEncoded = wifiSsidClass.methods.firstOrNull { method ->
+            method.name == "createFromAsciiEncoded" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
+        }
+        return createFromAsciiEncoded?.let {
+            runCatching { it.invoke(null, ssid) }.getOrNull()
         }
     }
 
@@ -616,5 +761,6 @@ class SystemServicesHooks(
 
     private companion object {
         private val MAC_ADDRESS_REGEX = Regex("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+        private const val SSID_INFORMATION_ELEMENT_ID = 0
     }
 }
