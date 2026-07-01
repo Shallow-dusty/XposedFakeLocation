@@ -55,6 +55,7 @@ private val LONGITUDE_RANGE = -180.0..180.0
 class MapViewModel(application: Application) : AndroidViewModel(application) {
     private val preferencesRepository = PreferencesRepository(application)
     private var routeJob: Job? = null
+    private var hasObservedIsPlaying = false
 
     private val _uiState = MutableStateFlow(
         MapUiState(mapZoom = preferencesRepository.getMapZoom())
@@ -88,7 +89,14 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             preferencesRepository.getIsPlayingFlow().collect { isPlaying ->
                 _uiState.update { it.copy(isPlaying = isPlaying) }
-                if (!isPlaying) stopRoutePlayback()
+                if (hasObservedIsPlaying) {
+                    if (isPlaying) {
+                        restartRoutePlaybackIfAvailable()
+                    } else {
+                        stopRoutePlayback()
+                    }
+                }
+                hasObservedIsPlaying = true
             }
         }
 
@@ -126,11 +134,6 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             preferencesRepository.saveIsPlaying(currentIsPlaying)
-            if (currentIsPlaying) {
-                restartRoutePlaybackIfAvailable()
-            } else {
-                stopRoutePlayback()
-            }
         }
     }
 
