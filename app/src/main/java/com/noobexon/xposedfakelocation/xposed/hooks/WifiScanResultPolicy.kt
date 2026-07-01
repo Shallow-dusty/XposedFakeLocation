@@ -29,3 +29,87 @@ internal object WifiScanResultPolicy {
             )
         )
 }
+
+internal object WifiScanResultTemplateSource {
+    fun <T> firstTemplate(
+        original: Any?,
+        isTemplate: (Any?) -> Boolean,
+        hasSafeInformationElements: (T) -> Boolean
+    ): T? {
+        val source = listFrom(original) ?: return null
+        return source.firstNotNullOfOrNull {
+            if (!isTemplate(it)) return@firstNotNullOfOrNull null
+            @Suppress("UNCHECKED_CAST")
+            val template = it as T
+            template.takeIf(hasSafeInformationElements)
+        }
+    }
+
+    private fun listFrom(original: Any?): List<*>? {
+        if (original is List<*>) return original
+        if (original == null) return null
+
+        val getListMethod = generateSequence(original.javaClass) { it.superclass }
+            .mapNotNull {
+                runCatching { it.getDeclaredMethod("getList") }.getOrNull()
+            }
+            .firstOrNull() ?: return null
+        return runCatching {
+            getListMethod.isAccessible = true
+            getListMethod.invoke(original) as? List<*>
+        }.getOrNull()
+    }
+}
+
+internal object WifiScanResultReturnAdapter {
+    private const val PARCELED_LIST_SLICE_SIMPLE_NAME = "ParceledListSlice"
+
+    fun adapt(original: Any?, replacement: List<*>): Any =
+        adapt(original = original, replacement = replacement, declaredReturnType = null, onWrapFailure = null)
+
+    fun adapt(
+        original: Any?,
+        replacement: List<*>,
+        declaredReturnType: Class<*>?,
+        onWrapFailure: ((Throwable) -> Unit)?
+    ): Any {
+        val sliceClass = parceledListSliceClass(declaredReturnType)
+            ?: parceledListSliceClass(original?.javaClass)
+
+        return adapt(
+            original = original,
+            replacement = replacement,
+            returnsParceledListSlice = sliceClass != null,
+            isParceledListSlice = ::isParceledListSlice,
+            createParceledListSlice = { createParceledListSlice(sliceClass ?: it.javaClass, it) },
+            onWrapFailure = onWrapFailure
+        )
+    }
+
+    internal fun adapt(
+        original: Any?,
+        replacement: List<*>,
+        returnsParceledListSlice: Boolean = false,
+        isParceledListSlice: (Any) -> Boolean,
+        createParceledListSlice: (List<*>) -> Any,
+        onWrapFailure: ((Throwable) -> Unit)? = null
+    ): Any {
+        if (!returnsParceledListSlice && (original == null || !isParceledListSlice(original))) return replacement
+
+        return runCatching { createParceledListSlice(replacement) }
+            .onFailure { onWrapFailure?.invoke(it) }
+            .getOrElse { original ?: replacement }
+    }
+
+    private fun isParceledListSlice(value: Any): Boolean =
+        parceledListSliceClass(value.javaClass) != null
+
+    private fun parceledListSliceClass(type: Class<*>?): Class<*>? =
+        type?.takeIf { it.simpleName == PARCELED_LIST_SLICE_SIMPLE_NAME }
+
+    private fun createParceledListSlice(sliceClass: Class<*>, replacement: List<*>): Any {
+        val constructor = sliceClass.getDeclaredConstructor(List::class.java)
+        constructor.isAccessible = true
+        return constructor.newInstance(replacement)
+    }
+}

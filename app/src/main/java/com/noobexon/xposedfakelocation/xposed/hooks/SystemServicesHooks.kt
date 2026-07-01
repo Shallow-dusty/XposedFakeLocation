@@ -288,7 +288,14 @@ class SystemServicesHooks(
             if (identity != null && shouldSpoofWifiArgs(chain.args, identity.targetApps)) {
                 val fakeResults = createFakeScanResults(result, identity)
                 module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing (${fakeResults.size} result(s)).")
-                fakeResults
+                WifiScanResultReturnAdapter.adapt(
+                    original = result,
+                    replacement = fakeResults,
+                    declaredReturnType = (chain.executable as? Method)?.returnType,
+                    onWrapFailure = {
+                        module.log(Log.WARN, tag, "Could not wrap Wi-Fi scan results: ${it.message}")
+                    }
+                )
             } else {
                 result
             }
@@ -315,9 +322,11 @@ class SystemServicesHooks(
             .build()
 
     private fun createFakeScanResults(original: Any?, identity: WifiIdentity): List<ScanResult> {
-        val template = (original as? List<*>)
-            ?.filterIsInstance<ScanResult>()
-            ?.firstOrNull { it.hasNonEmptyInformationElementsCompat() }
+        val template = WifiScanResultTemplateSource.firstTemplate<ScanResult>(
+            original = original,
+            isTemplate = { it is ScanResult },
+            hasSafeInformationElements = { it.hasNonEmptyInformationElementsCompat() }
+        )
 
         val specs = WifiScanResultPolicy.createSpecs(
             SpoofedWifiIdentity(
