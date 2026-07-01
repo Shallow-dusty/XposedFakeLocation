@@ -1,7 +1,10 @@
 package com.noobexon.xposedfakelocation.xposed.hooks
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
+import com.android.wifi.x.com.android.modules.utils.ParceledListSlice
 
 class WifiScanResultPolicyTest {
     @Test
@@ -26,5 +29,102 @@ class WifiScanResultPolicyTest {
             ),
             results
         )
+    }
+
+    @Test
+    fun scanResultReturnAdapterWrapsParceledListSliceResults() {
+        val original = Any()
+        val replacement = listOf("spoofed")
+        val wrapped = Any()
+
+        val result = WifiScanResultReturnAdapter.adapt(
+            original = original,
+            replacement = replacement,
+            isParceledListSlice = { it === original },
+            createParceledListSlice = {
+                assertSame(replacement, it)
+                wrapped
+            }
+        )
+
+        assertSame(wrapped, result)
+    }
+
+    @Test
+    fun scanResultReturnAdapterWrapsDeclaredParceledListSliceResults() {
+        val original = emptyList<String>()
+        val replacement = listOf("spoofed")
+        val wrapped = Any()
+
+        val result = WifiScanResultReturnAdapter.adapt(
+            original = original,
+            replacement = replacement,
+            returnsParceledListSlice = true,
+            isParceledListSlice = { false },
+            createParceledListSlice = {
+                assertSame(replacement, it)
+                wrapped
+            }
+        )
+
+        assertSame(wrapped, result)
+    }
+
+    @Test
+    fun scanResultReturnAdapterWrapsMainlineParceledListSliceResults() {
+        val replacement = listOf("spoofed")
+
+        val result = WifiScanResultReturnAdapter.adapt(
+            original = emptyList<String>(),
+            replacement = replacement,
+            declaredReturnType = ParceledListSlice::class.java,
+            onWrapFailure = null
+        )
+
+        assertTrue(result is ParceledListSlice)
+        assertSame(replacement, (result as ParceledListSlice).list)
+    }
+
+    @Test
+    fun scanResultTemplateSourceReadsMainlineParceledListSliceList() {
+        val original = ParceledListSlice(listOf("unsafe", "template"))
+
+        val result = WifiScanResultTemplateSource.firstTemplate<String>(
+            original = original,
+            isTemplate = { it is String },
+            hasSafeInformationElements = { it == "template" }
+        )
+
+        assertEquals("template", result)
+    }
+
+    @Test
+    fun scanResultReturnAdapterKeepsListResultsAsLists() {
+        val original = emptyList<String>()
+        val replacement = listOf("spoofed")
+
+        val result = WifiScanResultReturnAdapter.adapt(
+            original = original,
+            replacement = replacement,
+            isParceledListSlice = { false },
+            createParceledListSlice = { error("should not wrap list returns") }
+        )
+
+        assertSame(replacement, result)
+    }
+
+    @Test
+    fun scanResultReturnAdapterFallsBackToOriginalSliceWhenWrappingFails() {
+        val original = Any()
+        val replacement = listOf("spoofed")
+
+        val result = WifiScanResultReturnAdapter.adapt(
+            original = original,
+            replacement = replacement,
+            isParceledListSlice = { it === original },
+            createParceledListSlice = { throw IllegalStateException("no constructor") }
+        )
+
+        assertSame(original, result)
     }
 }
