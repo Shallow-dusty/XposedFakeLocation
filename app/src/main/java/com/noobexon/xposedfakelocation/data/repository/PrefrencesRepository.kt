@@ -202,6 +202,25 @@ class PreferencesRepository(context: Context) {
         editRemote { putString(KEY_LAST_CLICKED_LOCATION, json) }
     }
 
+    suspend fun saveControlLocation(
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float? = null,
+        start: Boolean = false
+    ) {
+        val json = gson.toJson(LastClickedLocation(latitude, longitude))
+        editRemote {
+            putString(KEY_LAST_CLICKED_LOCATION, json)
+            if (accuracy != null) {
+                putBoolean(KEY_USE_ACCURACY, true)
+                putLong(KEY_ACCURACY, java.lang.Double.doubleToRawLongBits(accuracy.toDouble()))
+            }
+            if (start) {
+                putBoolean(KEY_IS_PLAYING, true)
+            }
+        }
+    }
+
     fun getLastClickedLocation(): LastClickedLocation? =
         parseLastClickedLocation(remotePrefs()?.getString(KEY_LAST_CLICKED_LOCATION, null))
 
