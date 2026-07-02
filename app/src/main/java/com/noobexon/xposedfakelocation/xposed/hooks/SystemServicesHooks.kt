@@ -20,6 +20,7 @@ import java.lang.reflect.Array as ReflectArray
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 class SystemServicesHooks(
     private val module: XposedInterface,
@@ -286,7 +287,7 @@ class SystemServicesHooks(
             val result = chain.proceed()
             val identity = WifiIdentityHookPolicy.readActiveIdentity(module)
             if (identity != null && shouldSpoofWifiArgs(chain.args, identity.targetApps)) {
-                val fakeResults = createFakeScanResults(result, identity)
+                val fakeResults = createFakeScanResults(identity)
                 module.log(Log.INFO, tag, "Replaced Wi-Fi scan results while spoofing (${fakeResults.size} result(s)).")
                 WifiScanResultReturnAdapter.adapt(
                     original = result,
@@ -321,13 +322,7 @@ class SystemServicesHooks(
             .setNetworkId(0)
             .build()
 
-    private fun createFakeScanResults(original: Any?, identity: WifiIdentity): List<ScanResult> {
-        val template = WifiScanResultTemplateSource.firstTemplate<ScanResult>(
-            original = original,
-            isTemplate = { it is ScanResult },
-            hasSafeInformationElements = { it.hasNonEmptyInformationElementsCompat() }
-        )
-
+    private fun createFakeScanResults(identity: WifiIdentity): List<ScanResult> {
         val specs = WifiScanResultPolicy.createSpecs(
             SpoofedWifiIdentity(
                 ssid = identity.ssid,
@@ -335,27 +330,7 @@ class SystemServicesHooks(
                 rssi = identity.rssi
             )
         )
-        if (template != null) {
-            return specs.mapNotNull { it.toScanResult(template) }
-        }
-
-        module.log(Log.INFO, tag, "No safe Wi-Fi scan result template; synthesizing minimal spoofed scan result.")
         return specs.mapNotNull { it.toScanResult() }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun SpoofedWifiScanResultSpec.toScanResult(template: ScanResult): ScanResult? {
-        val spec = this
-        val scanResult = runCatching { ScanResult(template) }
-            .onFailure {
-                module.log(Log.WARN, tag, "Could not copy Wi-Fi scan result template: ${it.message}")
-            }
-            .getOrNull() ?: return null
-
-        return scanResult.apply {
-            applySpoofedSpec(spec)
-            rewriteSsidInformationElementCompat(spec.ssid)
-        }
     }
 
     @Suppress("DEPRECATION")
@@ -407,43 +382,6 @@ class SystemServicesHooks(
         }
     }
 
-    private fun ScanResult.hasNonEmptyInformationElementsCompat(): Boolean {
-        return runCatching {
-            val field = findInformationElementsField(javaClass) ?: return true
-            val value = field.get(this) ?: return false
-            !value.javaClass.isArray || ReflectArray.getLength(value) > 0
-        }.getOrElse {
-            module.log(Log.WARN, tag, "Could not inspect ScanResult information elements: ${it.message}")
-            false
-        }
-    }
-
-    private fun ScanResult.rewriteSsidInformationElementCompat(ssid: String) {
-        runCatching {
-            val field = findInformationElementsField(javaClass) ?: return
-            val elements = field.get(this) ?: return
-            if (!elements.javaClass.isArray) return
-
-            val length = ReflectArray.getLength(elements)
-            val componentType = elements.javaClass.componentType ?: return
-            val copiedElements = ReflectArray.newInstance(componentType, length)
-            val ssidBytes = ssid.toByteArray(StandardCharsets.UTF_8)
-
-            repeat(length) { index ->
-                val sourceElement = ReflectArray.get(elements, index)
-                val copiedElement = sourceElement?.copyInformationElementCompat()
-                if (copiedElement != null && copiedElement.informationElementIdCompat() == SSID_INFORMATION_ELEMENT_ID) {
-                    findField(copiedElement.javaClass, "bytes")?.set(copiedElement, ssidBytes)
-                }
-                ReflectArray.set(copiedElements, index, copiedElement ?: sourceElement)
-            }
-
-            field.set(this, copiedElements)
-        }.onFailure {
-            module.log(Log.WARN, tag, "Could not rewrite ScanResult SSID information element: ${it.message}")
-        }
-    }
-
     private fun ScanResult.setSyntheticInformationElementsCompat(ssid: String) {
         runCatching {
             val field = findInformationElementsField(javaClass)
@@ -491,16 +429,6 @@ class SystemServicesHooks(
             val unsafeField = unsafeClass.getDeclaredField("theUnsafe").apply { isAccessible = true }
             val unsafe = unsafeField.get(null)
             unsafeClass.getMethod("allocateInstance", Class::class.java).invoke(unsafe, elementClass)
-        }.getOrNull()
-    }
-
-    private fun Any.copyInformationElementCompat(): Any? {
-        return runCatching {
-            val constructor = javaClass.declaredConstructors.firstOrNull { constructor ->
-                constructor.parameterTypes.size == 1 && constructor.parameterTypes[0].isAssignableFrom(javaClass)
-            } ?: return null
-            constructor.isAccessible = true
-            constructor.newInstance(this)
         }.getOrNull()
     }
 
@@ -561,9 +489,20 @@ class SystemServicesHooks(
             method.name == "createFromAsciiEncoded" && method.parameterTypes.contentEquals(arrayOf(String::class.java))
         }
         return createFromAsciiEncoded?.let {
-            runCatching { it.invoke(null, ssid) }.getOrNull()
+            runCatching { it.invoke(null, encodeSsidForAsciiEncodedFactory(ssid)) }.getOrNull()
         }
     }
+
+    private fun encodeSsidForAsciiEncodedFactory(ssid: String): String =
+        ssid.toByteArray(StandardCharsets.UTF_8).joinToString(separator = "") { byte ->
+            val value = byte.toInt() and 0xff
+            when (value) {
+                '\\'.code -> "\\\\"
+                '"'.code -> "\\\""
+                in 0x20..0x7e -> value.toChar().toString()
+                else -> String.format(Locale.US, "\\x%02x", value)
+            }
+        }
 
     private fun hookGeofence(classLoader: ClassLoader) {
         val serviceClass = findClass(

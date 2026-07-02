@@ -30,37 +30,6 @@ internal object WifiScanResultPolicy {
         )
 }
 
-internal object WifiScanResultTemplateSource {
-    fun <T> firstTemplate(
-        original: Any?,
-        isTemplate: (Any?) -> Boolean,
-        hasSafeInformationElements: (T) -> Boolean
-    ): T? {
-        val source = listFrom(original) ?: return null
-        return source.firstNotNullOfOrNull {
-            if (!isTemplate(it)) return@firstNotNullOfOrNull null
-            @Suppress("UNCHECKED_CAST")
-            val template = it as T
-            template.takeIf(hasSafeInformationElements)
-        }
-    }
-
-    private fun listFrom(original: Any?): List<*>? {
-        if (original is List<*>) return original
-        if (original == null) return null
-
-        val getListMethod = generateSequence(original.javaClass) { it.superclass }
-            .mapNotNull {
-                runCatching { it.getDeclaredMethod("getList") }.getOrNull()
-            }
-            .firstOrNull() ?: return null
-        return runCatching {
-            getListMethod.isAccessible = true
-            getListMethod.invoke(original) as? List<*>
-        }.getOrNull()
-    }
-}
-
 internal object WifiScanResultReturnAdapter {
     private const val PARCELED_LIST_SLICE_SIMPLE_NAME = "ParceledListSlice"
 
