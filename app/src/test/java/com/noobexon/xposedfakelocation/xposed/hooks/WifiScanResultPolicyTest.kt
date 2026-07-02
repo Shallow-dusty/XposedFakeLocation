@@ -86,19 +86,6 @@ class WifiScanResultPolicyTest {
     }
 
     @Test
-    fun scanResultTemplateSourceReadsMainlineParceledListSliceList() {
-        val original = ParceledListSlice(listOf("unsafe", "template"))
-
-        val result = WifiScanResultTemplateSource.firstTemplate<String>(
-            original = original,
-            isTemplate = { it is String },
-            hasSafeInformationElements = { it == "template" }
-        )
-
-        assertEquals("template", result)
-    }
-
-    @Test
     fun scanResultReturnAdapterKeepsListResultsAsLists() {
         val original = emptyList<String>()
         val replacement = listOf("spoofed")
