@@ -498,15 +498,13 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.update { it.copy(isRouteMoving = true) }
         var currentIndex = 0
-        var direction = 1
 
         while (currentCoroutineContext().isActive) {
-            val nextIndex = currentIndex + direction
-            if (nextIndex !in waypoints.indices) {
-                if (!loop) break
-                direction *= -1
-                continue
-            }
+            val nextIndex = RoutePlaybackCalculator.nextWaypointIndex(
+                currentIndex = currentIndex,
+                waypointCount = waypoints.size,
+                loop = loop
+            ) ?: break
 
             moveAlongSegment(waypoints[currentIndex], waypoints[nextIndex])
             currentIndex = nextIndex

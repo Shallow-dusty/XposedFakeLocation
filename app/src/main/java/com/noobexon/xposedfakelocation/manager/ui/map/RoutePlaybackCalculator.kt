@@ -30,6 +30,12 @@ internal object RoutePlaybackCalculator {
         return RADIUS_EARTH * c
     }
 
+    fun nextWaypointIndex(currentIndex: Int, waypointCount: Int, loop: Boolean): Int? {
+        val nextIndex = currentIndex + 1
+        if (nextIndex < waypointCount) return nextIndex
+        return if (loop && waypointCount > 1) 0 else null
+    }
+
     private fun normalizeLongitude(longitude: Double): Double {
         var normalized = (longitude + 180.0) % 360.0
         if (normalized < 0.0) normalized += 360.0

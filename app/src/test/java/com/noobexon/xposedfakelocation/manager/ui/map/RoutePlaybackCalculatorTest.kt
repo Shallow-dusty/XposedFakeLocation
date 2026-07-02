@@ -60,4 +60,26 @@ class RoutePlaybackCalculatorTest {
 
         assertTrue(result in 111_000.0..112_000.0)
     }
+
+    @Test
+    fun nextWaypointIndex_wrapsLoopBackToFirstWaypoint() {
+        val result = RoutePlaybackCalculator.nextWaypointIndex(
+            currentIndex = 2,
+            waypointCount = 3,
+            loop = true
+        )
+
+        assertEquals(0, result)
+    }
+
+    @Test
+    fun nextWaypointIndex_stopsAtEndWithoutLoop() {
+        val result = RoutePlaybackCalculator.nextWaypointIndex(
+            currentIndex = 2,
+            waypointCount = 3,
+            loop = false
+        )
+
+        assertEquals(null, result)
+    }
 }
