@@ -1,6 +1,5 @@
 package com.noobexon.xposedfakelocation.xposed.hooks
 
-import android.net.wifi.ScanResult
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -63,9 +62,9 @@ class AppWifiHooks(
     }
 
     /**
-     * Hooks `WifiManager.getScanResults()` to return an empty list while spoofing is
-     * enabled, mirroring the [SystemServicesHooks] behaviour of clearing scan results
-     * so the real SSID/BSSID of nearby APs is not leaked.
+     * Hooks `WifiManager.getScanResults()` to return spoofed scan results while spoofing
+     * is enabled, mirroring the [SystemServicesHooks] behaviour via the shared
+     * [WifiScanResultPolicy] so both hook paths produce identical spoofed values.
      */
     private fun hookScanResults() {
         runCatching {
@@ -73,9 +72,14 @@ class AppWifiHooks(
             val method = wifiManagerClass.getDeclaredMethod("getScanResults")
             module.hook(method).intercept { chain ->
                 val result = chain.proceed()
-                if (WifiIdentityHookPolicy.readActiveIdentity(module)?.targets(packageName) == true) {
-                    module.log(Log.INFO, tag, "Cleared Wi-Fi scan results (app-side) while spoofing.")
-                    emptyList<ScanResult>()
+                val identity = WifiIdentityHookPolicy.readActiveIdentity(module)
+                if (identity?.targets(packageName) == true) {
+                    val fakeResults = WifiScanResultPolicy.createFakeScanResults(identity) { message, error ->
+                        val detail = error?.message?.let { "$message: $it" } ?: message
+                        module.log(Log.WARN, tag, detail)
+                    }
+                    module.log(Log.INFO, tag, "Replaced Wi-Fi scan results (app-side) while spoofing (${fakeResults.size} result(s)).")
+                    fakeResults
                 } else {
                     result
                 }
