@@ -2,6 +2,7 @@ package com.noobexon.xposedfakelocation.xposed.hooks
 
 import com.android.wifi.x.com.android.modules.utils.ParceledListSlice
 import java.nio.ByteBuffer
+import java.nio.MappedByteBuffer
 import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -161,6 +162,18 @@ class WifiScanResultPolicyTest {
     }
 
     @Test
+    fun informationElementCompatRejectsUnsupportedByteBufferSubtype() {
+        val result = WifiScanResultPolicy.createInformationElementCompat(
+            elementClass = MappedByteBufferInformationElement::class.java,
+            id = 0,
+            idExt = 0,
+            bytes = "CodexLab".toByteArray(StandardCharsets.UTF_8)
+        )
+
+        assertNull(result)
+    }
+
+    @Test
     fun asciiEncodedFallbackEscapesUtf8Bytes() {
         assertEquals(
             "Codex\\xe7\\xbd\\x91\\xe7\\xbb\\x9c\\\\\\\"",
@@ -188,5 +201,16 @@ class WifiScanResultPolicyTest {
 
         @JvmField
         var bytes: ByteBuffer = ByteBuffer.allocate(0)
+    }
+
+    private class MappedByteBufferInformationElement {
+        @JvmField
+        var id: Int = -1
+
+        @JvmField
+        var idExt: Int = -1
+
+        @JvmField
+        var bytes: MappedByteBuffer? = null
     }
 }

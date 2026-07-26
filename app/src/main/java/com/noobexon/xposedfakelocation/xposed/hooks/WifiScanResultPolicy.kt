@@ -181,8 +181,13 @@ internal object WifiScanResultPolicy {
             val field = findField(element.javaClass, "bytes") ?: return@runCatching false
             val value = when {
                 field.type == ByteArray::class.java -> bytes.copyOf()
-                ByteBuffer::class.java.isAssignableFrom(field.type) ->
-                    ByteBuffer.wrap(bytes.copyOf()).asReadOnlyBuffer()
+                ByteBuffer::class.java.isAssignableFrom(field.type) -> {
+                    val buffer = ByteBuffer.wrap(bytes.copyOf()).asReadOnlyBuffer()
+                    if (!field.type.isInstance(buffer)) {
+                        return@runCatching false
+                    }
+                    buffer
+                }
                 else -> return@runCatching false
             }
             field.set(element, value)
