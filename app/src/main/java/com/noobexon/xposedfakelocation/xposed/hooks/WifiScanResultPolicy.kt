@@ -13,12 +13,19 @@ internal data class SpoofedWifiScanResultSpec(
     val bssid: String,
     val rssi: Int,
     val frequency: Int,
-    val capabilities: String
+    val capabilities: String,
+    val distanceCm: Int,
+    val distanceSdCm: Int,
+    val operatorFriendlyName: String,
+    val venueName: String,
+    val ifaceName: String
 )
 
 internal object WifiScanResultPolicy {
     private const val DEFAULT_FREQUENCY = 2412
     private const val DEFAULT_CAPABILITIES = "[ESS]"
+    private const val UNSPECIFIED_DISTANCE_CM = -1
+    private const val EMPTY_METADATA = ""
     private const val SSID_INFORMATION_ELEMENT_ID = 0
 
     fun createSpecs(identity: WifiIdentity): List<SpoofedWifiScanResultSpec> =
@@ -28,7 +35,12 @@ internal object WifiScanResultPolicy {
                 bssid = identity.bssid,
                 rssi = identity.rssi,
                 frequency = DEFAULT_FREQUENCY,
-                capabilities = DEFAULT_CAPABILITIES
+                capabilities = DEFAULT_CAPABILITIES,
+                distanceCm = UNSPECIFIED_DISTANCE_CM,
+                distanceSdCm = UNSPECIFIED_DISTANCE_CM,
+                operatorFriendlyName = EMPTY_METADATA,
+                venueName = EMPTY_METADATA,
+                ifaceName = EMPTY_METADATA
             )
         )
 
@@ -50,8 +62,8 @@ internal object WifiScanResultPolicy {
         runCatching {
             ScanResult().apply {
                 SSID = ssid
-                if (!setWifiSsidCompat(ssid)) {
-                    onFailure("Could not set modern Wi-Fi SSID on synthetic ScanResult.", null)
+                check(setWifiSsidCompat(ssid)) {
+                    "Could not set modern Wi-Fi SSID on synthetic ScanResult."
                 }
                 BSSID = bssid
                 level = rssi
@@ -60,6 +72,13 @@ internal object WifiScanResultPolicy {
                 centerFreq0 = 0
                 centerFreq1 = 0
                 capabilities = this@toScanResult.capabilities
+                setIntFieldCompat(this, "distanceCm", this@toScanResult.distanceCm)
+                setIntFieldCompat(this, "distanceSdCm", this@toScanResult.distanceSdCm)
+                operatorFriendlyName = this@toScanResult.operatorFriendlyName
+                venueName = this@toScanResult.venueName
+                check(setObjectFieldCompat(this, "ifaceName", this@toScanResult.ifaceName)) {
+                    "Could not normalize synthetic ScanResult interface metadata."
+                }
                 timestamp = SystemClock.elapsedRealtimeNanos() / 1000L
                 check(setSyntheticInformationElementsCompat(ssid)) {
                     "Could not initialize synthetic ScanResult information elements."
@@ -210,6 +229,14 @@ internal object WifiScanResultPolicy {
         } else {
             field.set(target, value)
         }
+    }
+
+    private fun setObjectFieldCompat(target: Any, fieldName: String, value: Any?): Boolean {
+        val field = findField(target.javaClass, fieldName) ?: return true
+        return runCatching {
+            field.set(target, value)
+            field.get(target) == value
+        }.getOrDefault(false)
     }
 
     private fun findField(clazz: Class<*>, fieldName: String): Field? {

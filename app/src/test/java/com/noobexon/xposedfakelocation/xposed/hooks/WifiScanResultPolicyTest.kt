@@ -28,7 +28,12 @@ class WifiScanResultPolicyTest {
                     bssid = "12:34:56:78:9A:BC",
                     rssi = -42,
                     frequency = 2412,
-                    capabilities = "[ESS]"
+                    capabilities = "[ESS]",
+                    distanceCm = -1,
+                    distanceSdCm = -1,
+                    operatorFriendlyName = "",
+                    venueName = "",
+                    ifaceName = ""
                 )
             ),
             results
