@@ -5,6 +5,7 @@ import android.os.SystemClock
 import java.lang.reflect.Array as ReflectArray
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
@@ -169,9 +170,24 @@ internal object WifiScanResultPolicy {
         ) ?: return null
         setIntFieldCompat(element, "id", id)
         setIntFieldCompat(element, "idExt", idExt)
-        findField(element.javaClass, "bytes")?.set(element, bytes)
+        if (!setInformationElementBytesCompat(element, bytes)) {
+            return null
+        }
         return element
     }
+
+    private fun setInformationElementBytesCompat(element: Any, bytes: ByteArray): Boolean =
+        runCatching {
+            val field = findField(element.javaClass, "bytes") ?: return@runCatching false
+            val value = when {
+                field.type == ByteArray::class.java -> bytes.copyOf()
+                ByteBuffer::class.java.isAssignableFrom(field.type) ->
+                    ByteBuffer.wrap(bytes.copyOf()).asReadOnlyBuffer()
+                else -> return@runCatching false
+            }
+            field.set(element, value)
+            field.get(element) != null
+        }.getOrDefault(false)
 
     private fun instantiateInformationElementCompat(
         elementClass: Class<*>,
