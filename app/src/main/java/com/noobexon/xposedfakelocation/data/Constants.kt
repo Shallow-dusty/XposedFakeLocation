@@ -49,6 +49,9 @@ const val KEY_ENABLE_WIFI_IDENTITY = "enable_wifi_identity"
 
 const val KEY_THEME_OPTION = "theme_option"
 
+const val KEY_ROUTE_WAYPOINTS = "route_waypoints"
+const val KEY_ROUTE_LOOP_ENABLED = "route_loop_enabled"
+
 const val KEY_WIFI_SSID = "wifi_ssid"
 const val KEY_WIFI_BSSID = "wifi_bssid"
 const val KEY_WIFI_RSSI = "wifi_rssi"
@@ -92,6 +95,8 @@ const val DEFAULT_ENABLE_WIFI_IDENTITY = false
 
 const val DEFAULT_THEME_OPTION = ""
 
+const val DEFAULT_ROUTE_LOOP_ENABLED = false
+
 const val DEFAULT_WIFI_SSID = "AndroidAP"
 const val DEFAULT_WIFI_BSSID = "02:00:00:00:00:00"
 const val DEFAULT_WIFI_RSSI = -60
@@ -121,3 +126,6 @@ const val DEFAULT_MAP_ZOOM = 18.0
 const val WORLD_MAP_ZOOM = 2.0
 const val LOCATION_DETECTION_MAX_ATTEMPTS = 80
 const val LOCATION_DETECTION_DELAY_MS = 100L
+const val MAX_ROUTE_WAYPOINTS = 4
+const val ROUTE_TICK_INTERVAL_MS = 1000L
+const val DEFAULT_ROUTE_SPEED_MPS = 1.4f

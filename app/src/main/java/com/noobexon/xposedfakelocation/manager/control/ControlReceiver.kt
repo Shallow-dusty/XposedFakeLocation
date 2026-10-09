@@ -56,7 +56,8 @@ class ControlReceiver : BroadcastReceiver() {
         if (intent.hasExtra(EXTRA_LATITUDE) && intent.hasExtra(EXTRA_LONGITUDE)) {
             val coords = parseCoordinates(intent)
             if (coords != null) {
-                repository.saveLastClickedLocation(coords.first, coords.second)
+                repository.saveControlLocation(coords.first, coords.second, start = true)
+                return
             }
         }
         repository.saveIsPlaying(true)
@@ -64,21 +65,23 @@ class ControlReceiver : BroadcastReceiver() {
 
     private suspend fun handleSetLocation(intent: Intent, repository: PreferencesRepository) {
         val coords = parseCoordinates(intent) ?: return
-        repository.saveLastClickedLocation(coords.first, coords.second)
 
+        var accuracy: Float? = null
         if (intent.hasExtra(EXTRA_ACCURACY)) {
-            val accuracy = intent.getFloatExtra(EXTRA_ACCURACY, Float.NaN)
-            if (accuracy.isFinite() && accuracy >= 0f && accuracy <= ACCURACY_MAX_METERS) {
-                repository.saveUseAccuracy(true)
-                repository.saveAccuracy(accuracy.toDouble())
+            val accuracyExtra = intent.getFloatExtra(EXTRA_ACCURACY, Float.NaN)
+            if (accuracyExtra.isFinite() && accuracyExtra >= 0f && accuracyExtra <= ACCURACY_MAX_METERS) {
+                accuracy = accuracyExtra
             } else {
-                Log.w(TAG, "Ignoring out-of-range accuracy: $accuracy")
+                Log.w(TAG, "Ignoring out-of-range accuracy: $accuracyExtra")
             }
         }
 
-        if (intent.getBooleanExtra(EXTRA_START, false)) {
-            repository.saveIsPlaying(true)
-        }
+        repository.saveControlLocation(
+            latitude = coords.first,
+            longitude = coords.second,
+            accuracy = accuracy,
+            start = intent.getBooleanExtra(EXTRA_START, false)
+        )
     }
 
     private fun parseCoordinates(intent: Intent): Pair<Double, Double>? {
