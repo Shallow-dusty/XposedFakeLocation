@@ -86,7 +86,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 /**
@@ -107,10 +106,6 @@ import java.util.Locale
 class PreferencesRepository(context: Context) {
     private val tag = "PreferencesRepository"
 
-    private companion object {
-        const val REMOTE_PREFS_BIND_TIMEOUT_MS = 3_000L
-    }
-
     private val gson = Gson()
 
     private val localPrefs: SharedPreferences =
@@ -122,11 +117,8 @@ class PreferencesRepository(context: Context) {
     private suspend fun remotePrefsWhenAvailable(): SharedPreferences? {
         remotePrefs()?.let { return it }
 
-        val service = withTimeoutOrNull(REMOTE_PREFS_BIND_TIMEOUT_MS) {
-            App.serviceState.first { it != null }
-        } ?: return null
-
-        return service.getRemotePreferences(REMOTE_PREFS_GROUP)
+        val service = App.serviceState.first { it != null }
+        return service?.getRemotePreferences(REMOTE_PREFS_GROUP)
     }
 
     // region Flow helpers
@@ -163,7 +155,7 @@ class PreferencesRepository(context: Context) {
     // region Write helpers
 
     private suspend fun editRemote(action: SharedPreferences.Editor.() -> Unit) {
-        RemotePreferenceWriteQueue.write {
+        val completed = RemotePreferenceWriteQueue.write {
             val prefs = remotePrefsWhenAvailable()
             if (prefs == null) {
                 Log.w(tag, "Remote preferences unavailable (service not bound); write skipped")
@@ -177,6 +169,11 @@ class PreferencesRepository(context: Context) {
             if (!committed) {
                 Log.w(tag, "Remote preferences commit failed")
             }
+        }
+        if (completed == null) {
+            // Cancellation bounds queue/binding waits, not an already-running
+            // synchronous Binder commit, which may have completed before returning.
+            Log.w(tag, "Remote preferences write exceeded its queue/binding budget")
         }
     }
 

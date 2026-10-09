@@ -71,6 +71,41 @@ class RemotePreferenceWriteQueueTest {
     }
 
     @Test(timeout = 5_000)
+    fun queuedRequestsExpireWithinTheirOwnBudgetWithoutLateCommit() = runBlocking {
+        val releaseBinding = CompletableDeferred<Unit>()
+        val holder = launch(start = CoroutineStart.UNDISPATCHED) {
+            RemotePreferenceWriteQueue.write(timeoutMs = 2_000L) {
+                releaseBinding.await()
+            }
+        }
+        val earlierWaiters = List(3) {
+            launch(start = CoroutineStart.UNDISPATCHED) {
+                RemotePreferenceWriteQueue.write(timeoutMs = 2_000L) {
+                    releaseBinding.await()
+                }
+            }
+        }
+        var lateCommit = false
+        var result: Unit? = Unit
+        val receiver = launch(start = CoroutineStart.UNDISPATCHED) {
+            result = RemotePreferenceWriteQueue.write(timeoutMs = 50L) {
+                lateCommit = true
+            }
+        }
+        receiver.join()
+        assertNull(result)
+        assertTrue(holder.isActive)
+        assertTrue(earlierWaiters.all { it.isActive })
+        assertFalse(lateCommit)
+        releaseBinding.complete(Unit)
+        holder.join()
+        earlierWaiters.forEach { it.join() }
+        // The expired receiver must not enter the queue later after binding recovers.
+        assertFalse(lateCommit)
+        assertEquals(Unit, RemotePreferenceWriteQueue.write { Unit })
+    }
+
+    @Test(timeout = 5_000)
     fun failedWriteDoesNotBlockTheFollowingStop() = runBlocking {
         try {
             RemotePreferenceWriteQueue.write { error("commit failed") }
