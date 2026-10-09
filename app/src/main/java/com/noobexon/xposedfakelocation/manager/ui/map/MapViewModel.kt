@@ -1,6 +1,7 @@
 package com.noobexon.xposedfakelocation.manager.ui.map
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -55,7 +56,8 @@ private val LONGITUDE_RANGE = -180.0..180.0
 class MapViewModel(application: Application) : AndroidViewModel(application) {
     private val preferencesRepository = PreferencesRepository(application)
     private var routeJob: Job? = null
-    private var hasObservedIsPlaying = false
+    private val routePlaybackState = RoutePlaybackState()
+    private var isClearingLocation = false
 
     private val _uiState = MutableStateFlow(
         MapUiState(mapZoom = preferencesRepository.getMapZoom())
@@ -88,22 +90,27 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             preferencesRepository.getIsPlayingFlow().collect { isPlaying ->
-                _uiState.update { it.copy(isPlaying = isPlaying) }
-                if (hasObservedIsPlaying) {
-                    if (isPlaying) {
-                        restartRoutePlaybackIfAvailable()
-                    } else {
-                        stopRoutePlayback()
-                    }
+                val wasRequested = routePlaybackState.requested
+                routePlaybackState.observePlaying(isPlaying)
+                if (isClearingLocation) {
+                    routePlaybackState.request(false)
+                    return@collect
                 }
-                hasObservedIsPlaying = true
+                _uiState.update { it.copy(isPlaying = isPlaying == true) }
+                if (!routePlaybackState.requested) {
+                    stopRoutePlayback()
+                } else if (!wasRequested) {
+                    restartRoutePlaybackIfAvailable()
+                }
             }
         }
 
         viewModelScope.launch {
             preferencesRepository.getLastClickedLocationFlow().collect { location ->
                 val geoPoint = location?.let { GeoPoint(it.latitude, it.longitude) }
-                _uiState.update { it.copy(lastClickedLocation = geoPoint) }
+                if (!isClearingLocation) {
+                    _uiState.update { it.copy(lastClickedLocation = geoPoint) }
+                }
             }
         }
 
@@ -129,8 +136,15 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
      * coroutine write to [PreferencesRepository] happens asynchronously.
      */
     fun togglePlaying() {
+        if (isClearingLocation) return
         val currentIsPlaying = !_uiState.value.isPlaying
+        routePlaybackState.request(currentIsPlaying)
         _uiState.update { it.copy(isPlaying = currentIsPlaying) }
+        if (currentIsPlaying) {
+            restartRoutePlaybackIfAvailable()
+        } else {
+            stopRoutePlayback()
+        }
 
         viewModelScope.launch {
             preferencesRepository.saveIsPlaying(currentIsPlaying)
@@ -156,12 +170,28 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
      * @param geoPoint The new spoof target, or `null` to clear it.
      */
     fun updateClickedLocation(geoPoint: GeoPoint?) {
-        _uiState.update { it.copy(lastClickedLocation = geoPoint) }
-
-        viewModelScope.launch {
-            geoPoint?.let {
-                preferencesRepository.saveLastClickedLocation(it.latitude, it.longitude)
-            } ?: preferencesRepository.clearLastClickedLocation()
+        if (isClearingLocation) return
+        if (geoPoint == null) {
+            isClearingLocation = true
+            routePlaybackState.request(false)
+            val finishingRoute = routeJob
+            stopRoutePlayback()
+            _uiState.update { it.copy(lastClickedLocation = null, isPlaying = false) }
+            viewModelScope.launch {
+                try {
+                    // A cancelled ticker may already be inside a synchronous IO commit.
+                    // Wait for it before atomically clearing both remote keys.
+                    finishingRoute?.join()
+                    preferencesRepository.clearLastClickedLocation()
+                } finally {
+                    isClearingLocation = false
+                }
+            }
+        } else {
+            _uiState.update { it.copy(lastClickedLocation = geoPoint) }
+            viewModelScope.launch {
+                preferencesRepository.saveLastClickedLocation(geoPoint.latitude, geoPoint.longitude)
+            }
         }
     }
 
@@ -478,7 +508,7 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
     private fun restartRoutePlaybackIfAvailable() {
         stopRoutePlayback()
         val state = _uiState.value
-        if (!state.isPlaying || state.routeWaypoints.size < 2) return
+        if (!routePlaybackState.requested || !state.isPlaying || state.routeWaypoints.size < 2) return
         routeJob = viewModelScope.launch {
             runRoutePlayback(
                 waypoints = state.routeWaypoints,
@@ -517,11 +547,10 @@ class MapViewModel(application: Application) : AndroidViewModel(application) {
         val speed = routeSpeedMetersPerSecond()
         val distanceMeters = RoutePlaybackCalculator.distanceBetween(start, end)
         val durationMs = max(ROUTE_TICK_INTERVAL_MS, ((distanceMeters / speed) * 1000).toLong())
-        val startedAt = System.currentTimeMillis()
+        val clock = RouteSegmentClock(durationMs, SystemClock::elapsedRealtime)
 
         while (currentCoroutineContext().isActive) {
-            val elapsedMs = System.currentTimeMillis() - startedAt
-            val progress = (elapsedMs.toDouble() / durationMs).coerceIn(0.0, 1.0)
+            val progress = clock.progress()
             val latitude = RoutePlaybackCalculator.interpolate(start.latitude, end.latitude, progress)
             val longitude = RoutePlaybackCalculator.interpolateLongitude(start.longitude, end.longitude, progress)
             publishRouteLocation(latitude, longitude)

@@ -163,18 +163,20 @@ class PreferencesRepository(context: Context) {
     // region Write helpers
 
     private suspend fun editRemote(action: SharedPreferences.Editor.() -> Unit) {
-        val prefs = remotePrefsWhenAvailable()
-        if (prefs == null) {
-            Log.w(tag, "Remote preferences unavailable (service not bound); write skipped")
-            return
-        }
-        val committed = withContext(Dispatchers.IO) {
-            val editor = prefs.edit()
-            editor.action()
-            editor.commit()
-        }
-        if (!committed) {
-            Log.w(tag, "Remote preferences commit failed")
+        RemotePreferenceWriteQueue.write {
+            val prefs = remotePrefsWhenAvailable()
+            if (prefs == null) {
+                Log.w(tag, "Remote preferences unavailable (service not bound); write skipped")
+                return@write
+            }
+            val committed = withContext(Dispatchers.IO) {
+                val editor = prefs.edit()
+                editor.action()
+                editor.commit()
+            }
+            if (!committed) {
+                Log.w(tag, "Remote preferences commit failed")
+            }
         }
     }
 
@@ -191,7 +193,9 @@ class PreferencesRepository(context: Context) {
     // endregion
 
     // region Is Playing (remote)
-    fun getIsPlayingFlow(): Flow<Boolean> = remoteFlow(KEY_IS_PLAYING, false) { it.getBoolean(KEY_IS_PLAYING, false) }
+    // null means disconnected, not an observed STOP followed by a new START.
+    fun getIsPlayingFlow(): Flow<Boolean?> =
+        remoteFlow(KEY_IS_PLAYING, null) { it.getBoolean(KEY_IS_PLAYING, false) }
     suspend fun saveIsPlaying(isPlaying: Boolean) {
         editRemote {
             if (isPlaying) {
@@ -238,8 +242,10 @@ class PreferencesRepository(context: Context) {
         parseLastClickedLocation(remotePrefs()?.getString(KEY_LAST_CLICKED_LOCATION, null))
 
     suspend fun clearLastClickedLocation() {
-        editRemote { remove(KEY_LAST_CLICKED_LOCATION) }
-        saveIsPlaying(false)
+        editRemote {
+            remove(KEY_LAST_CLICKED_LOCATION)
+            remove(KEY_IS_PLAYING)
+        }
         Log.d(tag, "Cleared 'LastClickedLocation' and set 'IsPlaying' to false")
     }
 
