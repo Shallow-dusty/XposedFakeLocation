@@ -12,6 +12,7 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_ALTITUDE
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_BROADCAST_CONTROL
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_SYSTEM_HOOKS
+import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_WIFI_IDENTITY
 import com.noobexon.xposedfakelocation.data.DEFAULT_HIDE_FAKE_LOCATION_TOAST
 import com.noobexon.xposedfakelocation.data.DEFAULT_LANGUAGE_TAG
 import com.noobexon.xposedfakelocation.data.DEFAULT_MAP_ZOOM
@@ -31,10 +32,14 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_VERTICAL_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_SSID
 import com.noobexon.xposedfakelocation.data.KEY_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_ALTITUDE
 import com.noobexon.xposedfakelocation.data.KEY_ENABLE_BROADCAST_CONTROL
 import com.noobexon.xposedfakelocation.data.KEY_ENABLE_SYSTEM_HOOKS
+import com.noobexon.xposedfakelocation.data.KEY_ENABLE_WIFI_IDENTITY
 import com.noobexon.xposedfakelocation.data.KEY_FAVORITES
 import com.noobexon.xposedfakelocation.data.KEY_HIDE_FAKE_LOCATION_TOAST
 import com.noobexon.xposedfakelocation.data.KEY_IS_PLAYING
@@ -59,11 +64,18 @@ import com.noobexon.xposedfakelocation.data.KEY_USE_SPEED
 import com.noobexon.xposedfakelocation.data.KEY_USE_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_USE_VERTICAL_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_SSID
+import com.noobexon.xposedfakelocation.data.MAC_ADDRESS_REGEX
+import com.noobexon.xposedfakelocation.data.MAX_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.MIN_WIFI_RSSI
 import com.noobexon.xposedfakelocation.data.REMOTE_PREFS_GROUP
 import com.noobexon.xposedfakelocation.data.SHARED_PREFS_FILE
 import com.noobexon.xposedfakelocation.data.model.FavoriteLocation
 import com.noobexon.xposedfakelocation.data.model.LastClickedLocation
 import com.noobexon.xposedfakelocation.data.model.RouteWaypoint
+import com.noobexon.xposedfakelocation.data.normalizeWifiSsid
 import com.noobexon.xposedfakelocation.manager.App
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +87,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 
 /**
  * Single-source-of-truth preferences store.
@@ -323,10 +336,59 @@ class PreferencesRepository(context: Context) {
     fun getEnableSystemHooks(): Boolean = remotePrefs()?.getBoolean(KEY_ENABLE_SYSTEM_HOOKS, DEFAULT_ENABLE_SYSTEM_HOOKS) ?: DEFAULT_ENABLE_SYSTEM_HOOKS
     // endregion
 
+    // region Enable Wi-Fi Identity Hooks (remote)
+    fun getEnableWifiIdentityFlow(): Flow<Boolean> =
+        remoteFlow(KEY_ENABLE_WIFI_IDENTITY, DEFAULT_ENABLE_WIFI_IDENTITY) {
+            it.getBoolean(KEY_ENABLE_WIFI_IDENTITY, DEFAULT_ENABLE_WIFI_IDENTITY)
+        }
+
+    suspend fun saveEnableWifiIdentity(enabled: Boolean) =
+        editRemote { putBoolean(KEY_ENABLE_WIFI_IDENTITY, enabled) }
+
+    fun getEnableWifiIdentity(): Boolean =
+        remotePrefs()?.getBoolean(KEY_ENABLE_WIFI_IDENTITY, DEFAULT_ENABLE_WIFI_IDENTITY)
+            ?: DEFAULT_ENABLE_WIFI_IDENTITY
+    // endregion
+
     // region Hide Fake Location Toast (remote)
     fun getHideFakeLocationToastFlow(): Flow<Boolean> = remoteFlow(KEY_HIDE_FAKE_LOCATION_TOAST, DEFAULT_HIDE_FAKE_LOCATION_TOAST) { it.getBoolean(KEY_HIDE_FAKE_LOCATION_TOAST, DEFAULT_HIDE_FAKE_LOCATION_TOAST) }
     suspend fun saveHideFakeLocationToast(hideFakeLocationToast: Boolean) = editRemote { putBoolean(KEY_HIDE_FAKE_LOCATION_TOAST, hideFakeLocationToast) }
     fun getHideFakeLocationToast(): Boolean = remotePrefs()?.getBoolean(KEY_HIDE_FAKE_LOCATION_TOAST, DEFAULT_HIDE_FAKE_LOCATION_TOAST) ?: DEFAULT_HIDE_FAKE_LOCATION_TOAST
+    // endregion
+
+    // region Wi-Fi identity (remote)
+    fun getWifiSsidFlow(): Flow<String> =
+        remoteFlow(KEY_WIFI_SSID, DEFAULT_WIFI_SSID) {
+            normalizeWifiSsid(it.getString(KEY_WIFI_SSID, DEFAULT_WIFI_SSID))
+        }
+
+    suspend fun saveWifiSsid(ssid: String) =
+        editRemote { putString(KEY_WIFI_SSID, normalizeWifiSsid(ssid)) }
+
+    fun getWifiBssidFlow(): Flow<String> =
+        remoteFlow(KEY_WIFI_BSSID, DEFAULT_WIFI_BSSID) {
+            normalizeWifiBssid(it.getString(KEY_WIFI_BSSID, DEFAULT_WIFI_BSSID).orEmpty())
+        }
+
+    suspend fun saveWifiBssid(bssid: String) =
+        editRemote { putString(KEY_WIFI_BSSID, normalizeWifiBssid(bssid)) }
+
+    fun getWifiRssiFlow(): Flow<Int> =
+        remoteFlow(KEY_WIFI_RSSI, DEFAULT_WIFI_RSSI) {
+            it.getInt(KEY_WIFI_RSSI, DEFAULT_WIFI_RSSI).coerceIn(MIN_WIFI_RSSI, MAX_WIFI_RSSI)
+        }
+
+    suspend fun saveWifiRssi(rssi: Int) =
+        editRemote { putInt(KEY_WIFI_RSSI, rssi.coerceIn(MIN_WIFI_RSSI, MAX_WIFI_RSSI)) }
+
+    private fun normalizeWifiBssid(bssid: String): String {
+        val trimmed = bssid.trim()
+        return if (MAC_ADDRESS_REGEX.matches(trimmed)) {
+            trimmed.uppercase(Locale.US)
+        } else {
+            DEFAULT_WIFI_BSSID
+        }
+    }
     // endregion
 
     // region Target Apps (remote)
@@ -456,4 +518,5 @@ class PreferencesRepository(context: Context) {
     fun getThemeOptionFlow(): Flow<String> = localFlow(KEY_THEME_OPTION) { it.getString(KEY_THEME_OPTION, DEFAULT_THEME_OPTION) ?: DEFAULT_THEME_OPTION }
     suspend fun saveThemeOption(themeTag: String) = editLocal { putString(KEY_THEME_OPTION, themeTag) }
     // endregion
+
 }

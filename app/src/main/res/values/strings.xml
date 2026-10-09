@@ -6,6 +6,7 @@
     <string name="language_system">System default</string>
     <string name="language_english">English</string>
     <string name="language_chinese">Chinese</string>
+    <string name="language_german">German</string>
 
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>
@@ -59,6 +60,7 @@
     <string name="category_notifications">Notifications</string>
     <string name="category_external_control">External Control</string>
     <string name="category_system_hooks">System Hooks</string>
+    <string name="category_wifi_identity">Wi-Fi Identity</string>
     <string name="category_location">Location</string>
     <string name="category_altitude">Altitude</string>
     <string name="category_movement">Movement</string>
@@ -76,7 +78,18 @@
     <string name="setting_external_broadcast_title">Allow external broadcast control</string>
     <string name="setting_external_broadcast_description">Off (default): blocks the BroadcastReceiver — no app or ADB shell can start/stop spoofing or set coordinates via intents. On: any installed app and \'adb shell am broadcast\' can drive the module (no permission check; coordinates are clamped to valid lat/lon ranges). Only enable this if you trust every app on the device or are running on a controlled (e.g., automation) device. See docs/EXTERNAL_CONTROL.md for actions and lock-down options.</string>
     <string name="setting_system_hooks_title">Enable system-level hooks</string>
-    <string name="setting_system_hooks_description">Adds the Android system framework (android) and the phone process (com.android.phone) to the module scope so location can be spoofed at the system level. A device restart is required for changes to take effect.</string>
+    <string name="setting_system_hooks_description">Adds system_server (system) and the phone process (com.android.phone) to the module scope so location can be spoofed at the system level. A device restart is required for changes to take effect.</string>
+    <string name="setting_wifi_identity_title">Enable Wi-Fi identity hooks</string>
+    <string name="setting_wifi_identity_description">Spoof Wi-Fi connection identity and hide real scan results for selected target apps while location spoofing is active.</string>
+    <string name="setting_wifi_ssid_title">Wi-Fi SSID</string>
+    <string name="setting_wifi_ssid_description">SSID returned by Wi-Fi connection hooks for selected target apps while spoofing is active.</string>
+    <string name="setting_wifi_ssid_label">SSID</string>
+    <string name="setting_wifi_bssid_title">Wi-Fi BSSID</string>
+    <string name="setting_wifi_bssid_description">BSSID returned by Wi-Fi connection hooks. Invalid MAC addresses fall back to the default placeholder.</string>
+    <string name="setting_wifi_bssid_label">BSSID</string>
+    <string name="setting_wifi_rssi_title">Wi-Fi RSSI</string>
+    <string name="setting_wifi_rssi_description">Signal strength in dBm returned by Wi-Fi connection hooks. Values are clamped from -127 to 0.</string>
+    <string name="setting_wifi_rssi_label">RSSI</string>
     <string name="dialog_restart_required_title">Restart Required</string>
     <string name="dialog_restart_required_enable_message">System-level hooks were added to the module scope. Please restart your device for them to take effect.</string>
     <string name="dialog_restart_required_disable_message">System-level hooks were removed from the module scope. Please restart your device to fully undo them.</string>

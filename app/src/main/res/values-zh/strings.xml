@@ -6,6 +6,7 @@
     <string name="language_system">跟随系统</string>
     <string name="language_english">英语</string>
     <string name="language_chinese">中文</string>
+    <string name="language_german">德语</string>
 
     <string name="action_ok">确定</string>
     <string name="action_cancel">取消</string>
@@ -57,6 +58,7 @@
     <string name="category_notifications">通知</string>
     <string name="category_external_control">外部控制</string>
     <string name="category_system_hooks">系统级 Hook</string>
+    <string name="category_wifi_identity">Wi-Fi 身份</string>
     <string name="category_location">位置</string>
     <string name="category_altitude">海拔</string>
     <string name="category_movement">移动</string>
@@ -74,7 +76,18 @@
     <string name="setting_external_broadcast_title">允许外部广播控制</string>
     <string name="setting_external_broadcast_description">关闭（默认）：阻止 BroadcastReceiver，任何应用或 ADB shell 都不能通过 intent 开始/停止模拟或设置坐标。开启：任何已安装应用和“adb shell am broadcast”都可以驱动模块（无权限检查；坐标会被限制在有效经纬度范围内）。仅当你信任设备上的所有应用，或在受控设备（例如自动化设备）上运行时才启用。操作说明和锁定选项见 docs/EXTERNAL_CONTROL.md。</string>
     <string name="setting_system_hooks_title">启用系统级 Hook</string>
-    <string name="setting_system_hooks_description">将 Android 系统框架（android）和电话进程（com.android.phone）添加到模块作用域，以便在系统层面模拟位置。更改需要重启设备后才能生效。</string>
+    <string name="setting_system_hooks_description">将 system_server（system）和电话进程（com.android.phone）添加到模块作用域，以便在系统层面模拟位置。更改需要重启设备后才能生效。</string>
+    <string name="setting_wifi_identity_title">启用 Wi-Fi 身份 Hook</string>
+    <string name="setting_wifi_identity_description">定位模拟开启时，为已选目标应用模拟 Wi-Fi 连接身份并隐藏真实扫描结果。</string>
+    <string name="setting_wifi_ssid_title">Wi-Fi SSID</string>
+    <string name="setting_wifi_ssid_description">Wi-Fi 连接 Hook 在模拟开启时为已选目标应用返回的 SSID。</string>
+    <string name="setting_wifi_ssid_label">SSID</string>
+    <string name="setting_wifi_bssid_title">Wi-Fi BSSID</string>
+    <string name="setting_wifi_bssid_description">Wi-Fi 连接 Hook 返回的 BSSID。无效 MAC 地址会回退到默认占位值。</string>
+    <string name="setting_wifi_bssid_label">BSSID</string>
+    <string name="setting_wifi_rssi_title">Wi-Fi RSSI</string>
+    <string name="setting_wifi_rssi_description">Wi-Fi 连接 Hook 返回的信号强度（dBm），取值会限制在 -127 到 0 之间。</string>
+    <string name="setting_wifi_rssi_label">RSSI</string>
     <string name="dialog_restart_required_title">需要重启</string>
     <string name="dialog_restart_required_enable_message">系统级 Hook 已添加到模块作用域。请重启设备以使其生效。</string>
     <string name="dialog_restart_required_disable_message">系统级 Hook 已从模块作用域中移除。请重启设备以彻底撤销。</string>

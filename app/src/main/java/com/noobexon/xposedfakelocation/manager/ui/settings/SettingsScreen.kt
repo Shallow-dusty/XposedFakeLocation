@@ -172,6 +172,14 @@ fun SettingsScreen(
         SettingsCategory.SYSTEM_HOOKS to listOf(
             SettingEntry.Switch(SettingKeys.SYSTEM_HOOKS, R.string.setting_system_hooks_title, R.string.setting_system_hooks_description, uiState.systemHooksEnabled, settingsViewModel::setEnableSystemHooks)
         ),
+        SettingsCategory.WIFI_IDENTITY to buildList {
+            add(SettingEntry.Switch(SettingKeys.WIFI_IDENTITY, R.string.setting_wifi_identity_title, R.string.setting_wifi_identity_description, uiState.wifiIdentityEnabled, settingsViewModel::setEnableWifiIdentity))
+            if (uiState.wifiIdentityEnabled) {
+                add(SettingEntry.Text(SettingKeys.WIFI_SSID, R.string.setting_wifi_ssid_title, R.string.setting_wifi_ssid_description, R.string.setting_wifi_ssid_label, uiState.wifiSsid, onValueChange = settingsViewModel::setWifiSsid))
+                add(SettingEntry.Text(SettingKeys.WIFI_BSSID, R.string.setting_wifi_bssid_title, R.string.setting_wifi_bssid_description, R.string.setting_wifi_bssid_label, uiState.wifiBssid, onValueChange = settingsViewModel::setWifiBssid))
+                add(SettingEntry.Text(SettingKeys.WIFI_RSSI, R.string.setting_wifi_rssi_title, R.string.setting_wifi_rssi_description, R.string.setting_wifi_rssi_label, uiState.wifiRssi.toString(), TextInputKind.SIGNED_NUMBER, settingsViewModel::setWifiRssi))
+            }
+        },
         SettingsCategory.EXTERNAL_CONTROL to listOf(
             SettingEntry.Switch(SettingKeys.BROADCAST, R.string.setting_external_broadcast_title, R.string.setting_external_broadcast_description, uiState.enableBroadcastControl, settingsViewModel::setEnableBroadcastControl)
         ),
@@ -528,6 +536,14 @@ private fun SettingEntryRow(entry: SettingEntry) {
             useValue = entry.enabled,
             onUseValueChange = entry.onEnabledChange,
             value = entry.value,
+            onValueChange = entry.onValueChange
+        )
+        is SettingEntry.Text -> TextSettingItem(
+            title = stringResource(entry.titleRes),
+            description = stringResource(entry.descriptionRes),
+            label = stringResource(entry.labelRes),
+            value = entry.value,
+            inputKind = entry.inputKind,
             onValueChange = entry.onValueChange
         )
         is SettingEntry.Language -> LanguageSettingItem(
@@ -945,6 +961,69 @@ private fun BooleanSettingItem(
             trailing = {
                 SettingSwitch(title = title, checked = checked, onCheckedChange = onCheckedChange)
             }
+        )
+    }
+}
+
+/**
+ * A text setting row that commits on field blur or IME Done. This mirrors the numeric row's
+ * "commit when editing finishes" behaviour without adding a switch or slider.
+ */
+@Composable
+private fun TextSettingItem(
+    title: String,
+    description: String,
+    label: String,
+    value: String,
+    inputKind: TextInputKind,
+    onValueChange: (String) -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    var showTooltip by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf(value) }
+    var hasFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value) {
+        if (text != value) text = value
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(Dimensions.SPACING_SMALL)
+    ) {
+        SettingHeader(
+            title = title,
+            description = description,
+            showTooltip = showTooltip,
+            onToggleTooltip = { showTooltip = !showTooltip },
+            trailing = {}
+        )
+
+        Spacer(modifier = Modifier.height(Dimensions.SPACING_SMALL))
+
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            label = { Text(label) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = when (inputKind) {
+                    TextInputKind.TEXT -> KeyboardType.Text
+                    TextInputKind.SIGNED_NUMBER -> KeyboardType.Text
+                },
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused) {
+                        hasFocused = true
+                    } else if (hasFocused) {
+                        onValueChange(text)
+                    }
+                }
         )
     }
 }

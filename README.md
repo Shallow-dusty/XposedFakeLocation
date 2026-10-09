@@ -39,7 +39,7 @@
 ## **Features**
 
 - **Per-App Location Spoofing**: Pick the apps that should receive a fake location directly inside the app — your selection drives the LSPosed module scope automatically, so you never have to manage scope by hand.
-- **Optional System-Level Hooks**: Extend spoofing into the Android system framework (`android`) and the phone process (`com.android.phone`) for deeper coverage, via a single toggle in Settings.
+- **Optional System-Level Hooks**: Extend spoofing into `system_server` (`system`) and the phone process (`com.android.phone`) for deeper coverage, via a single toggle in Settings.
 - **Custom Coordinates**: Set precise GPS latitude and longitude coordinates by tapping the integrated map.
 - **Fine-Tuned Spoofing Settings**: Customize sensor values such as horizontal/vertical accuracy, altitude, mean sea level (and its accuracy), speed (and its accuracy), and GPS noise.
 - **Randomization**: Set a radius for location randomization to mimic real-world movement patterns.
@@ -93,7 +93,7 @@ If you want to build by yourself:
    - Open a recent **LSPosed Manager** that supports the new API (see [Prerequisites](#prerequisites)).
    - Enable the `XposedFakeLocation` module and reboot once.
    - **Select target apps from inside `XposedFakeLocation`** (the `Target Apps` screen). Your selection updates the module's LSPosed scope automatically — there's no need to manage scope manually in LSPosed.
-   - **(Optional) System-level hooks:** to spoof the Android system framework (`android`) and phone process (`com.android.phone`) as well, open `Settings` inside `XposedFakeLocation` and enable **`Enable system-level hooks`**. This adds those packages to the scope; **reboot** your device for the change to take effect (and reboot again after turning it off).
+   - **(Optional) System-level hooks:** to spoof `system_server` (`system`) and phone process (`com.android.phone`) as well, open `Settings` inside `XposedFakeLocation` and enable **`Enable system-level hooks`**. This adds those packages to the scope; **reboot** your device for the change to take effect (and reboot again after turning it off).
 
 > [!NOTE]
 > From now on, all you need to do in `LSPosed` is **enable the module** — the entire scope is managed from within the `XposedFakeLocation` app itself. Adding/removing target apps and toggling system-level hooks updates the LSPosed scope automatically, so you should not edit the module's scope manually in `LSPosed`.

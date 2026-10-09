@@ -213,6 +213,12 @@ class SystemServicesHooks(
         return PreferencesUtil.getTargetApps().contains(packageName)
     }
 
+    /** Attributes the Binder call to a selected target package after the shared gate passes. */
+    private fun shouldSpoofWifiArgs(
+        args: List<Any?>?,
+        targetApps: Set<String>
+    ): Boolean = WifiIdentityHookPolicy.targetsSystemWifiCaller(args, targetApps)
+
     private fun hookGnssRegistration(classLoader: ClassLoader) {
         val serviceClasses = listOfNotNull(
             findClass(classLoader, "com.android.server.location.gnss.GnssManagerService"),
@@ -274,7 +280,8 @@ class SystemServicesHooks(
     private fun hookWifiServiceImpl(wifiServiceClass: Class<*>) {
         hookAll(wifiServiceClass, "getScanResults") { chain ->
             val result = chain.proceed()
-            if (shouldSpoofArgs(chain.args)) {
+            val identity = WifiIdentityHookPolicy.readActiveIdentity(module)
+            if (identity != null && shouldSpoofWifiArgs(chain.args, identity.targetApps)) {
                 module.log(Log.INFO, tag, "Cleared Wi-Fi scan results while spoofing.")
                 emptyList<Any>()
             } else {
@@ -284,21 +291,23 @@ class SystemServicesHooks(
 
         hookAll(wifiServiceClass, "getConnectionInfo") { chain ->
             val result = chain.proceed()
-            if (shouldSpoofArgs(chain.args)) {
-                // TODO: These Wi-Fi identity values are hardcoded as a temporary fallback.
-                // Expose them as user-configurable settings in the manager app.
+            val identity = WifiIdentityHookPolicy.readActiveIdentity(module)
+            if (identity != null && shouldSpoofWifiArgs(chain.args, identity.targetApps)) {
                 module.log(Log.INFO, tag, "Replaced Wi-Fi connection info while spoofing.")
-                WifiInfo.Builder()
-                    .setBssid("02:00:00:00:00:00")
-                    .setSsid("AndroidAP".toByteArray())
-                    .setRssi(-60)
-                    .setNetworkId(0)
-                    .build()
+                createFakeWifiInfo(identity)
             } else {
                 result
             }
         }
     }
+
+    private fun createFakeWifiInfo(identity: WifiIdentity): WifiInfo =
+        WifiInfo.Builder()
+            .setBssid(identity.bssid)
+            .setSsid(identity.ssid.toByteArray())
+            .setRssi(identity.rssi)
+            .setNetworkId(0)
+            .build()
 
     private fun hookGeofence(classLoader: ClassLoader) {
         val serviceClass = findClass(
@@ -584,4 +593,5 @@ class SystemServicesHooks(
             else -> null
         }
     }
+
 }

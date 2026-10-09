@@ -12,8 +12,12 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_RANDOMIZE_RADIUS
 import com.noobexon.xposedfakelocation.data.DEFAULT_SPEED
 import com.noobexon.xposedfakelocation.data.DEFAULT_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_SSID
 import com.noobexon.xposedfakelocation.data.KEY_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_ALTITUDE
+import com.noobexon.xposedfakelocation.data.KEY_ENABLE_SYSTEM_HOOKS
 import com.noobexon.xposedfakelocation.data.KEY_HIDE_FAKE_LOCATION_TOAST
 import com.noobexon.xposedfakelocation.data.KEY_IS_PLAYING
 import com.noobexon.xposedfakelocation.data.KEY_LAST_CLICKED_LOCATION
@@ -32,7 +36,14 @@ import com.noobexon.xposedfakelocation.data.KEY_USE_SPEED
 import com.noobexon.xposedfakelocation.data.KEY_USE_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_USE_VERTICAL_ACCURACY
 import com.noobexon.xposedfakelocation.data.KEY_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.KEY_WIFI_SSID
+import com.noobexon.xposedfakelocation.data.MAC_ADDRESS_REGEX
+import com.noobexon.xposedfakelocation.data.MAX_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.MIN_WIFI_RSSI
 import com.noobexon.xposedfakelocation.data.model.LastClickedLocation
+import com.noobexon.xposedfakelocation.data.normalizeWifiSsid
 import com.noobexon.xposedfakelocation.xposed.utils.PreferencesUtil.gson
 import com.noobexon.xposedfakelocation.xposed.utils.PreferencesUtil.init
 
@@ -99,6 +110,18 @@ object PreferencesUtil {
     fun getUseSpeedAccuracy(): Boolean? = getPreference(KEY_USE_SPEED_ACCURACY)
     fun getSpeedAccuracy(): Float? = getPreference(KEY_SPEED_ACCURACY)
     fun getHideFakeLocationToast(): Boolean? = getPreference(KEY_HIDE_FAKE_LOCATION_TOAST)
+    fun getEnableSystemHooks(): Boolean = preferences?.getBoolean(KEY_ENABLE_SYSTEM_HOOKS, false) ?: false
+
+    fun getWifiSsid(): String =
+        normalizeWifiSsid(preferences?.getString(KEY_WIFI_SSID, DEFAULT_WIFI_SSID))
+
+    fun getWifiBssid(): String =
+        preferences?.getString(KEY_WIFI_BSSID, DEFAULT_WIFI_BSSID)?.trim()?.takeIf(MAC_ADDRESS_REGEX::matches)
+            ?: DEFAULT_WIFI_BSSID
+
+    fun getWifiRssi(): Int =
+        preferences?.getInt(KEY_WIFI_RSSI, DEFAULT_WIFI_RSSI)?.coerceIn(MIN_WIFI_RSSI, MAX_WIFI_RSSI)
+            ?: DEFAULT_WIFI_RSSI
 
     /**
      * Returns the set of package names selected by the user as spoofing targets.
@@ -159,4 +182,5 @@ object PreferencesUtil {
             }
         }
     }
+
 }

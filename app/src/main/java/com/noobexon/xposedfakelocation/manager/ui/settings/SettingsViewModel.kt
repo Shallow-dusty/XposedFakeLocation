@@ -10,6 +10,7 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_ALTITUDE
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_BROADCAST_CONTROL
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_SYSTEM_HOOKS
+import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_WIFI_IDENTITY
 import com.noobexon.xposedfakelocation.data.DEFAULT_HIDE_FAKE_LOCATION_TOAST
 import com.noobexon.xposedfakelocation.data.DEFAULT_LANGUAGE_TAG
 import com.noobexon.xposedfakelocation.data.DEFAULT_MEAN_SEA_LEVEL
@@ -27,6 +28,11 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_VERTICAL_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_SSID
+import com.noobexon.xposedfakelocation.data.MAX_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.MIN_WIFI_RSSI
 import com.noobexon.xposedfakelocation.data.SYSTEM_HOOK_PACKAGES
 import com.noobexon.xposedfakelocation.data.repository.PreferencesRepository
 import com.noobexon.xposedfakelocation.manager.App
@@ -237,6 +243,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         preferencesRepository::saveHideFakeLocationToast
     )
 
+    // ---- Wi-Fi identity ----------------------------------------------------------------------
+
+    private val _enableWifiIdentity = Preference(
+        DEFAULT_ENABLE_WIFI_IDENTITY,
+        preferencesRepository.getEnableWifiIdentityFlow(),
+        preferencesRepository::saveEnableWifiIdentity
+    )
+    private val _wifiSsid = Preference(
+        DEFAULT_WIFI_SSID,
+        preferencesRepository.getWifiSsidFlow(),
+        preferencesRepository::saveWifiSsid
+    )
+    private val _wifiBssid = Preference(
+        DEFAULT_WIFI_BSSID,
+        preferencesRepository.getWifiBssidFlow(),
+        preferencesRepository::saveWifiBssid
+    )
+    private val _wifiRssi = Preference(
+        DEFAULT_WIFI_RSSI,
+        preferencesRepository.getWifiRssiFlow(),
+        preferencesRepository::saveWifiRssi
+    )
+
     // ---- External control --------------------------------------------------------------------
 
     private val _enableBroadcastControl = Preference(
@@ -318,6 +347,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         .combine(_hideFakeLocationToast.state)   { s, v -> s.copy(hideFakeLocationToast = v) }
         .combine(_enableBroadcastControl.state)  { s, v -> s.copy(enableBroadcastControl = v) }
         .combine(enableSystemHooks)              { s, v -> s.copy(systemHooksEnabled = v) }
+        .combine(_enableWifiIdentity.state)      { s, v -> s.copy(wifiIdentityEnabled = v) }
+        .combine(_wifiSsid.state)                { s, v -> s.copy(wifiSsid = v) }
+        .combine(_wifiBssid.state)               { s, v -> s.copy(wifiBssid = v) }
+        .combine(_wifiRssi.state)                { s, v -> s.copy(wifiRssi = v) }
         .combine(_languageTag.state)             { s, v -> s.copy(languageTag = v) }
         .combine(_themeOption.state)             { s, v -> s.copy(themeOption = ThemeOption.fromTag(v)) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
@@ -426,6 +459,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      */
     fun setHideFakeLocationToast(value: Boolean) = _hideFakeLocationToast.set(value)
 
+    fun setEnableWifiIdentity(value: Boolean) = _enableWifiIdentity.set(value)
+
+    fun setWifiSsid(value: String) =
+        _wifiSsid.set(value.trim().ifBlank { DEFAULT_WIFI_SSID })
+
+    fun setWifiBssid(value: String) =
+        _wifiBssid.set(value.trim().ifBlank { DEFAULT_WIFI_BSSID })
+
+    fun setWifiRssi(value: String) {
+        val rssi = value.trim().toIntOrNull()?.coerceIn(MIN_WIFI_RSSI, MAX_WIFI_RSSI)
+            ?: DEFAULT_WIFI_RSSI
+        _wifiRssi.set(rssi)
+    }
+
     /**
      * Applies the given [option] as the active UI theme. The preference is persisted locally and
      * reflected immediately in [SettingsUiState.themeOption]; [AppViewModel] observes the same
@@ -508,6 +555,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         setUseSpeedAccuracy(DEFAULT_USE_SPEED_ACCURACY)
         setSpeedAccuracy(DEFAULT_SPEED_ACCURACY)
         setHideFakeLocationToast(DEFAULT_HIDE_FAKE_LOCATION_TOAST)
+        setEnableWifiIdentity(DEFAULT_ENABLE_WIFI_IDENTITY)
+        setWifiSsid(DEFAULT_WIFI_SSID)
+        setWifiBssid(DEFAULT_WIFI_BSSID)
+        setWifiRssi(DEFAULT_WIFI_RSSI.toString())
         setEnableBroadcastControl(DEFAULT_ENABLE_BROADCAST_CONTROL)
     }
 
@@ -562,4 +613,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
 }

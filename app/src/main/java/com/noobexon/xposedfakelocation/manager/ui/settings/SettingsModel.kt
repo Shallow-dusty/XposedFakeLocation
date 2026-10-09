@@ -6,6 +6,7 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_ALTITUDE
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_BROADCAST_CONTROL
 import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_SYSTEM_HOOKS
+import com.noobexon.xposedfakelocation.data.DEFAULT_ENABLE_WIFI_IDENTITY
 import com.noobexon.xposedfakelocation.data.DEFAULT_HIDE_FAKE_LOCATION_TOAST
 import com.noobexon.xposedfakelocation.data.DEFAULT_LANGUAGE_TAG
 import com.noobexon.xposedfakelocation.data.DEFAULT_MEAN_SEA_LEVEL
@@ -23,6 +24,9 @@ import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_SPEED_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_USE_VERTICAL_ACCURACY
 import com.noobexon.xposedfakelocation.data.DEFAULT_VERTICAL_ACCURACY
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_BSSID
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_RSSI
+import com.noobexon.xposedfakelocation.data.DEFAULT_WIFI_SSID
 import com.noobexon.xposedfakelocation.manager.localization.LanguageOption
 import com.noobexon.xposedfakelocation.manager.ui.theme.ThemeOption
 import kotlin.math.round
@@ -39,6 +43,7 @@ enum class SettingsCategory(@StringRes val titleRes: Int) {
     MOVEMENT(R.string.category_movement),
     NOTIFICATIONS(R.string.category_notifications),
     SYSTEM_HOOKS(R.string.category_system_hooks),
+    WIFI_IDENTITY(R.string.category_wifi_identity),
     EXTERNAL_CONTROL(R.string.category_external_control),
     APPEARANCE(R.string.category_appearance),
     LANGUAGE(R.string.category_language)
@@ -154,9 +159,18 @@ enum class NumericSetting(
 object SettingKeys {
     const val HIDE_TOAST = "hide_toast"
     const val SYSTEM_HOOKS = "system_hooks"
+    const val WIFI_IDENTITY = "wifi_identity"
+    const val WIFI_SSID = "wifi_ssid"
+    const val WIFI_BSSID = "wifi_bssid"
+    const val WIFI_RSSI = "wifi_rssi"
     const val BROADCAST = "broadcast"
     const val THEME = "theme"
     const val LANGUAGE = "language"
+}
+
+enum class TextInputKind {
+    TEXT,
+    SIGNED_NUMBER
 }
 
 /** Every variant exposes a stable [key]
@@ -212,6 +226,20 @@ sealed interface SettingEntry {
         override val titleRes: Int get() = setting.titleRes
         override val descriptionRes: Int get() = setting.descriptionRes
     }
+
+    /**
+     * A plain text row for settings that do not need a toggle or slider but still need a labelled,
+     * searchable input field.
+     */
+    data class Text(
+        override val key: String,
+        @StringRes override val titleRes: Int,
+        @StringRes override val descriptionRes: Int,
+        @StringRes val labelRes: Int,
+        val value: String,
+        val inputKind: TextInputKind = TextInputKind.TEXT,
+        val onValueChange: (String) -> Unit
+    ) : SettingEntry
 
     /**
      * The language picker row. Tapping anywhere on the row opens a language selection dialog;
@@ -282,6 +310,11 @@ data class SettingsUiState(
     val hideFakeLocationToast: Boolean = DEFAULT_HIDE_FAKE_LOCATION_TOAST,
     val enableBroadcastControl: Boolean = DEFAULT_ENABLE_BROADCAST_CONTROL,
     val systemHooksEnabled: Boolean = DEFAULT_ENABLE_SYSTEM_HOOKS,
+    // Wi-Fi identity
+    val wifiIdentityEnabled: Boolean = DEFAULT_ENABLE_WIFI_IDENTITY,
+    val wifiSsid: String = DEFAULT_WIFI_SSID,
+    val wifiBssid: String = DEFAULT_WIFI_BSSID,
+    val wifiRssi: Int = DEFAULT_WIFI_RSSI,
     // App
     val languageTag: String = DEFAULT_LANGUAGE_TAG,
     val themeOption: ThemeOption = ThemeOption.fromTag(DEFAULT_THEME_OPTION),
